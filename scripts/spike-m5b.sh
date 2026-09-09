@@ -80,6 +80,8 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || fail "--second needs a video file"
       saw_second=1
       passthrough+=("--second" "$(to_windows "$2")"); shift 2 ;;
+    --hls-first)
+      passthrough+=("--hls-first"); shift ;;
     --hls-segments)
       [ $# -ge 2 ] || fail "--hls-segments needs a directory of .ts files"
       passthrough+=("--hls-segments" "$(to_windows "$2")"); shift 2 ;;

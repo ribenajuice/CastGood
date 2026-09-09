@@ -108,6 +108,17 @@ export interface SpikeM5bOptions {
    * The television was right and the instrument was wrong.
    */
   readonly hlsDurations?: readonly number[];
+  /**
+   * Load the growing playlist as the **first** load on a fresh session, instead of over a
+   * running film.
+   *
+   * ⚠️ **This is the control, and without it the HLS result cannot be read.** On 2026-09-09
+   * the `Chromecast Ultra` answered the handover playlist with `LOAD_FAILED` after fetching
+   * it three times. Two readings fit that equally well: **these segments are bad**, or **a
+   * receiver refuses HLS into a session that is already playing** — and the second would
+   * reshape 24y. One run of this flag separates them.
+   */
+  readonly hlsFirst?: boolean;
   readonly logger: Logger;
   readonly transport: TransportFactory;
 }
@@ -389,6 +400,16 @@ export async function runSpikeM5b(options: SpikeM5bOptions): Promise<SpikeM5bRep
     session.send(NS_CONNECTION, transportId, { type: 'CONNECT', userAgent: 'CastGood-spike' });
 
     // --- the first film, the ordinary way -----------------------------------
+    //
+    // With `hlsFirst` this is the growing playlist instead, loaded from cold. That is the
+    // control for the handover result: same playlist, same segments, no running film.
+    const firstIsHls = options.hlsFirst === true && (options.hlsSegments ?? []).length > 0;
+    if (firstIsHls) {
+      published.count = 1;
+      publisher = setInterval(() => {
+        if (published.count < (options.hlsSegments ?? []).length) published.count += 1;
+      }, SEGMENT_PUBLISH_MS);
+    }
     const firstMark = Date.now();
     await session.request(
       NS_MEDIA,
@@ -397,20 +418,65 @@ export async function runSpikeM5b(options: SpikeM5bOptions): Promise<SpikeM5bRep
         type: 'LOAD',
         autoplay: true,
         currentTime: 0,
-        media: {
-          contentId: `${base}/first.mp4`,
-          streamType: 'BUFFERED',
-          contentType: 'video/mp4',
-        },
+        media: firstIsHls
+          ? {
+              contentId: `${base}/second.m3u8`,
+              streamType: 'BUFFERED',
+              contentType: 'application/vnd.apple.mpegurl',
+            }
+          : {
+              contentId: `${base}/first.mp4`,
+              streamType: 'BUFFERED',
+              contentType: 'video/mp4',
+            },
       },
       30_000,
     );
+    // A refusal HERE is about the playlist, not about any handover — say so, because that
+    // is the entire point of running with this flag.
+    if (firstIsHls) {
+      await new Promise((resolve) => setTimeout(resolve, 4_000));
+      const refusedCold = session.wire.find(
+        (f) => f.dir === 'in' && (f.type === 'LOAD_FAILED' || f.type === 'LOAD_CANCELLED'),
+      );
+      if (refusedCold !== undefined) {
+        throw new SpikeAbort(
+          `the television refused the growing playlist as a FIRST load (${String(refusedCold.type)}), on a fresh session with nothing playing. ` +
+            'So the refusal seen during a handover is about these segments or this playlist, NOT about loading over a running film. ' +
+            'The handover question stays open, and the segments are what to fix.',
+        );
+      }
+    }
     const firstGap = await waitForPlaying(session, transportId, firstMark, 30_000);
     if (firstGap === null) {
       throw new SpikeAbort(
         'the first film never reached PLAYING, so there was no running session to load a second one over. Nothing about a handover was tested.',
       );
     }
+    if (firstIsHls) {
+      if (publisher !== null) {
+        clearInterval(publisher);
+        publisher = null;
+      }
+      return {
+        findings: [
+          finding(
+            'Does a GROWING PLAYLIST play at all on this television, loaded from cold?',
+            `yes — PLAYING after ${String(firstGap)} ms`,
+            { note: 'the control run for the handover result' },
+          ),
+        ],
+        verdicts: [
+          verdict(
+            1,
+            'a second LOAD starts the next film without relaunching the receiver',
+            'inconclusive',
+            'this was the CONTROL run, not a handover: the playlist was loaded from cold and played, which proves the segments and the playlist are sound. Re-run WITHOUT --hls-first; a refusal there is then a real finding about loading HLS over a running film, and it reshapes 24y.',
+          ),
+        ],
+      };
+    }
+
     findings.push(
       finding(
         'How long did the FIRST film take, loaded the ordinary way?',

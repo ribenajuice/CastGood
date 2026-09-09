@@ -3880,7 +3880,20 @@ async function scenarioSourceGone(context: Context): Promise<Assertion[]> {
     if (!cast.ok) return assertions;
 
     // Let it get a buffer, then pull the file out from under it.
-    await context.sleep(4_000);
+    //
+    // ⚠️ **Twenty seconds, not four, and the number is the whole point of this wait.** 15a
+    // can only be graded while playback is genuinely unaffected, which means the television
+    // must have buffered past the six-second silence window before the source disappears.
+    // Four seconds did not buy that on a `Chromecast Ultra`: on 2026-09-09 it starved 6.2 s
+    // after removal — twice — and the leg first blamed the product (#68) and then, once
+    // that was fixed, correctly refused to grade at all (exit 2). An honest instrument that
+    // can never reach a verdict is better than a lying one, but it is not the goal.
+    //
+    // This is not padding a test until it passes. The leg's precondition is a buffered
+    // film; four seconds was a guess at how long that takes and it was wrong for this
+    // hardware. If a set still starves after twenty, the guard below says so and the run
+    // exits 2 rather than inventing a failure.
+    await context.sleep(20_000);
     const removedAt = context.mono();
     await fsp.rm(copy);
 

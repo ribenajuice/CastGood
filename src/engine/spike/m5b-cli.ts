@@ -12,6 +12,12 @@
 //   --second <path>       the film loaded over it (required)
 //   --hls-segments <dir>  a directory of .ts segments, published one at a time,
 //                         to measure the GROWING-PLAYLIST handover as well
+//   --hls-first           THE CONTROL. Load that playlist as the FIRST load on a
+//                         fresh session instead of over a running film. If it plays,
+//                         the segments are sound and a refusal during a handover is a
+//                         real finding about loading HLS over a running film. If it
+//                         does not play, the segments are what to fix and the handover
+//                         question is still open.
 //
 // ⚠️ WITHOUT --hls-segments THE VERDICT IS `inconclusive`, AND THAT IS ON PURPOSE.
 // 24y makes the second film a growing playlist whenever its conversion is
@@ -71,6 +77,7 @@ async function main(): Promise<number> {
   const first = arg(argv, '--first');
   const second = arg(argv, '--second');
   const segmentDir = arg(argv, '--hls-segments');
+  const hlsFirst = argv.includes('--hls-first');
 
   if (deviceName === null && address === null) {
     throw new SpikeAbort('--device (or --address) is required');
@@ -135,8 +142,9 @@ async function main(): Promise<number> {
         };
 
   process.stderr.write(
-    `\n[spike-m5b] ${found.friendlyName} (${found.model}) at ${found.address}\n` +
-      `[spike-m5b] handovers: mp4${segments.length > 0 ? ' and growing-hls' : ' ONLY — verdict will be inconclusive'}\n\n`,
+    `\n[spike-m5b] ${found.friendlyName} (${found.model}) at ${found.address}\n` + hlsFirst
+      ? '[spike-m5b] CONTROL RUN: the growing playlist is loaded FROM COLD, not over a film\n\n'
+      : `[spike-m5b] handovers: mp4${segments.length > 0 ? ' and growing-hls' : ' ONLY — verdict will be inconclusive'}\n\n`,
   );
 
   const report = await runSpikeM5b({
@@ -146,6 +154,7 @@ async function main(): Promise<number> {
     secondFile: second,
     hlsSegments: segments,
     hlsDurations: durations,
+    hlsFirst,
     logger,
     transport: tlsTransportFactory,
   });
