@@ -6,6 +6,7 @@ import { CAST } from '../config.js';
 import type { Logger } from '../logging/index.js';
 import type { TransportFactory } from '../cast/index.js';
 import { buildPlaylist } from '../media-server/hls.js';
+import { contentTypeFor } from '../media-server/index.js';
 import {
   NS_CONNECTION,
   NS_MEDIA,
@@ -227,7 +228,11 @@ function serve(
       const start = Number(rawStart ?? 0);
       const end = rawEnd !== undefined && rawEnd !== '' ? Number(rawEnd) : size - 1;
       response.writeHead(206, {
-        'Content-Type': 'video/mp4',
+        // ⚠️ **`.ts` is `video/mp2t`, not `video/mp4`.** This served every segment as MP4,
+        // and a receiver that cannot parse what it was handed answers `LOAD_FAILED` — which
+        // is what the Ultra did, from cold and over a running film alike. The engine has had
+        // the right table all along; asking it is the fix, writing a fourth one was the bug.
+        'Content-Type': contentTypeFor(file),
         'Content-Length': end - start + 1,
         'Content-Range': `bytes ${String(start)}-${String(end)}/${String(size)}`,
         'Accept-Ranges': 'bytes',
@@ -236,7 +241,7 @@ function serve(
       return;
     }
     response.writeHead(200, {
-      'Content-Type': 'video/mp4',
+      'Content-Type': contentTypeFor(file),
       'Content-Length': size,
       'Accept-Ranges': 'bytes',
     });
