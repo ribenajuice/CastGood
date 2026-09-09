@@ -117,6 +117,13 @@ export default function App(): JSX.Element {
               // Choosing a file sends nothing to any device; it only tells the engine what
               // is chosen. The Cast press is the only thing that reaches a TV.
               sendIntent({ type: 'file.select', path: outcome.path });
+              // 24a: everything chosen goes into the queue, in the order 24z decides.
+              //
+              // ⚠️ The FIRST file is also the chosen file above, so one film is a queue of
+              // one and every screen is byte-for-byte the v1 product (24b). The rail is not
+              // drawn below two items, so nothing about this is visible to somebody who
+              // picks a single film — which is the whole of what 24b promises.
+              sendIntent({ type: 'queue.add', paths: [...outcome.paths] });
               return;
             case 'cancelled':
               // The previous selection is untouched (criterion 2b): we send nothing at all.

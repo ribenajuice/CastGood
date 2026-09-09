@@ -27,7 +27,7 @@ declare global {
        * main process exposes this the Choose video button renders disabled with its
        * reason beside it rather than looking pressable and doing nothing.
        */
-      pickVideoFile?: (startIn?: string) => Promise<string | null>;
+      pickVideoFile?: (startIn?: string) => Promise<string[]>;
       /**
        * Opens the native picker filtered to subtitle files (18c), resolving to the chosen
        * path or `null` if the founder cancelled.
@@ -125,7 +125,13 @@ export function canPickFile(): boolean {
 }
 
 export type PickOutcome =
-  | { readonly kind: 'selected'; readonly path: string }
+  | {
+      readonly kind: 'selected';
+      /** The first file — the v1 path, unchanged (24b). */
+      readonly path: string;
+      /** Every file chosen, in dialog order. 24z sorts them; this does not. */
+      readonly paths: readonly string[];
+    }
   /** Cancelling leaves the previous selection untouched (criterion 2b). */
   | { readonly kind: 'cancelled' }
   | { readonly kind: 'unavailable' }
@@ -144,9 +150,10 @@ export async function pickVideoFile(startIn?: unknown): Promise<PickOutcome> {
   // string means "no starting folder"; it can never reach the bridge.
   const from = typeof startIn === 'string' ? startIn : undefined;
   try {
-    const path = await pick(from);
-    if (path === null || path === '') return { kind: 'cancelled' };
-    return { kind: 'selected', path };
+    const paths = (await pick(from)).filter((p) => typeof p === 'string' && p !== '');
+    const first = paths[0];
+    if (first === undefined) return { kind: 'cancelled' };
+    return { kind: 'selected', path: first, paths };
   } catch {
     // The reason belongs in the engine log, not on screen: the founder gets a plain
     // sentence beside the button and can press it again.
@@ -176,7 +183,9 @@ export async function pickSubtitleFile(startIn?: unknown): Promise<PickOutcome> 
   try {
     const path = await pick(from);
     if (path === null || path === '') return { kind: 'cancelled' };
-    return { kind: 'selected', path };
+    // A subtitle is always one file — 18c picks a single track, never a batch. It reports
+    // `paths` for the shared shape's sake and it is always exactly one.
+    return { kind: 'selected', path, paths: [path] };
   } catch {
     return { kind: 'failed' };
   }

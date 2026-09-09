@@ -140,7 +140,8 @@ export interface CastGoodBridge {
   send(intent: unknown): void;
   requestSnapshot(): void;
   /** Resolves the chosen absolute path, or `null` if the founder cancelled. Never rejects. */
-  pickVideoFile(startIn?: string): Promise<string | null>;
+  /** 24a: every chosen file, in the order the dialog returned them. Empty ⇒ cancelled. */
+  pickVideoFile(startIn?: string): Promise<string[]>;
   /** Resolves the chosen subtitle path, or `null` if the founder cancelled. Never rejects for a cancel. */
   pickSubtitleFile(startIn?: string): Promise<string | null>;
   allowFirewall(): Promise<FirewallOutcome>;
