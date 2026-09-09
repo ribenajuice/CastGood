@@ -1191,6 +1191,25 @@ export function createEngine(options: EngineOptions = {}): Engine {
     push();
   }
 
+  /**
+   * The friendly name of a device id, remembered across it leaving the device list.
+   *
+   * ⚠️ **The whole point is the last line.** Resolving a name out of `discovery.devices()`
+   * works right up until the moment it matters: a television that has lost power is gone
+   * from that list, and "Lost connection to <name>" is a sentence about exactly that
+   * television. Issue #66 — the app named a different, healthy set in the room.
+   */
+  let lastDeviceName: { readonly id: string; readonly name: string } | null = null;
+  function rememberedDeviceName(id: string | null): string | null {
+    if (id === null) return null;
+    const found = discovery.devices().find((device) => device.id === id);
+    if (found !== undefined) {
+      lastDeviceName = { id, name: found.friendlyName };
+      return found.friendlyName;
+    }
+    return lastDeviceName?.id === id ? lastDeviceName.name : null;
+  }
+
   function push(): void {
     const model = session.model;
     const sessionNotice: NoticeSnapshot | null =
@@ -1266,6 +1285,10 @@ export function createEngine(options: EngineOptions = {}): Engine {
         state: model.state,
         flags: model.flags,
         deviceId: model.deviceId,
+        // Remembered, never looked up at read time. See SessionSnapshot.deviceName: a
+        // television that loses power leaves the discovery list, and that is exactly when
+        // the app has to name it.
+        deviceName: rememberedDeviceName(model.deviceId),
         positionSec: session.positionSec(),
         durationSec: session.durationSec(),
         // Dragging needs a device that is playing, a duration to drag along, and a
