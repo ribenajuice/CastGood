@@ -136,3 +136,20 @@ export function nextAfterPlaying(queue: Queue): QueueItem | null {
   const at = queue.items.findIndex((item) => item.id === queue.playingId);
   return at < 0 ? null : (queue.items[at + 1] ?? null);
 }
+
+/**
+ * Where a row dropped on a target actually lands.
+ *
+ * ⚠️ **The subtraction is the whole function, and it is the easiest thing here to get
+ * quietly wrong.** Dropping *below* row N means index N+1 — but the dragged row is removed
+ * before it is re-inserted, which shifts everything after it down one. Without the
+ * correction a one-place move down silently becomes a two-place move, which looks almost
+ * right and reorders somebody's season.
+ *
+ * It lives here rather than in the component so the test and the rail use the same
+ * arithmetic. A test that re-implements it asserts the author's memory twice over.
+ */
+export function dropIndex(from: number, targetIndex: number, below: boolean): number {
+  const raw = targetIndex + (below ? 1 : 0);
+  return raw > from ? raw - 1 : raw;
+}

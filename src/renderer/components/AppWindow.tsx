@@ -18,10 +18,16 @@ export function AppWindow({
   stateName,
   main,
   devices,
+  queue,
 }: {
   readonly stateName: string;
   readonly main: ReactNode;
   readonly devices: ReactNode;
+  /**
+   * The queue rail — §12. `null` below two items, which is 24b: a queue of one is the v1
+   * product and its window is the one M4 measured.
+   */
+  readonly queue: ReactNode;
 }): JSX.Element {
   return (
     <div
@@ -35,6 +41,10 @@ export function AppWindow({
         <h1 className="sr-only">CastGood</h1>
         {main}
       </main>
+      {/* §12: between the main column and the DevicePanel. The device rail does not move —
+          the queue is absent for a queue of one, and devices jumping sides when a second
+          film is added would be worse than the space it costs. */}
+      {queue}
       <aside
         // *Use a different device* moves focus in here; the attribute is the anchor.
         data-devices=""

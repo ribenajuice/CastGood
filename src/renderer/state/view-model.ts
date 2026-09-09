@@ -381,6 +381,23 @@ export interface HostQuestion {
   readonly safeIndex: number;
 }
 
+export interface QueueRowView {
+  readonly id: string;
+  readonly name: string;
+  readonly verdict: string | null;
+  readonly selected: boolean;
+  /** The one on the television. Carries no Remove — 24e. */
+  readonly current: boolean;
+  readonly canRemove: boolean;
+}
+
+export interface QueueRailView {
+  readonly rows: readonly QueueRowView[];
+  /** §12: the rail is drawn only above one item. A queue of one is v1 untouched (24b). */
+  readonly visible: boolean;
+  readonly label: string;
+}
+
 export interface ViewModel {
   /** The `docs/DESIGN-SYSTEM.md` §2 name of this state. On the DOM for QA to read. */
   readonly stateName: string;
@@ -410,6 +427,7 @@ export interface ViewModel {
    * than looking pressable and doing nothing.
    */
   readonly questionPending: boolean;
+  readonly queue: QueueRailView;
 }
 
 /**
@@ -1787,6 +1805,32 @@ export function buildViewModel(
     devices: asking ? inertDevices(devicesOf(snapshot)) : devicesOf(snapshot),
     preparation: preparationOf(snapshot),
     questionPending: hostQuestion !== null,
+    queue: queueOf(snapshot),
+  };
+}
+
+/**
+ * The queue rail — M5b step 1, §12.
+ *
+ * ⚠️ **Not drawn at one item or none.** 24b promises a queue of one is the v1 product
+ * byte-for-byte, and a rail appearing beside a single chosen film would break that on the
+ * most ordinary screen in the app. `visible` is the whole of that promise on this side.
+ */
+function queueOf(snapshot: StateSnapshot): QueueRailView {
+  const { items, selectedId, playingId } = snapshot.queue;
+  return {
+    visible: items.length > 1,
+    label: `${String(items.length)} lined up`,
+    rows: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      verdict: item.verdict,
+      selected: item.id === selectedId,
+      current: item.id === playingId,
+      // 24e. The way past a film is Stop then *Skip to <next>*, and the app names that path
+      // rather than showing a control that quietly does nothing.
+      canRemove: item.id !== playingId,
+    })),
   };
 }
 

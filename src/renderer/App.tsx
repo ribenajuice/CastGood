@@ -20,6 +20,7 @@ import { StatusRegion } from './components/StatusRegion.js';
 import { FirewallPanel } from './components/FirewallPanel.js';
 import { PreparationPanel } from './components/PreparationPanel.js';
 import { SubtitlesPanel } from './components/SubtitlesPanel.js';
+import { QueueRail } from './components/QueueRail.js';
 import { TransportPanel } from './components/TransportPanel.js';
 import { INITIAL_SNAPSHOT } from './state/initial-snapshot.js';
 import {
@@ -433,6 +434,20 @@ export default function App(): JSX.Element {
             />
           )}
         </>
+      }
+      queue={
+        <QueueRail
+          queue={vm.queue}
+          onSelect={(id) => {
+            sendIntent({ type: 'queue.select', id });
+          }}
+          onRemove={(id) => {
+            sendIntent({ type: 'queue.remove', id });
+          }}
+          onMove={(id, toIndex) => {
+            sendIntent({ type: 'queue.move', id, toIndex });
+          }}
+        />
       }
       devices={
         <DevicePanel

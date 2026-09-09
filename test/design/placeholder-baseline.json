@@ -86,6 +86,24 @@
       "detail": "text-sm"
     },
     {
+      "file": "src/renderer/components/QueueRail.tsx",
+      "line": 121,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/QueueRail.tsx",
+      "line": 190,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/QueueRail.tsx",
+      "line": 191,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
       "file": "src/renderer/components/SubtitlesPanel.tsx",
       "line": 61,
       "rule": "22a/below-floor",
