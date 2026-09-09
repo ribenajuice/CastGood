@@ -3908,15 +3908,26 @@ async function scenarioSourceGone(context: Context): Promise<Assertion[]> {
     const silenceDeadline = context.mono() + 6_000;
     while (context.mono() < silenceDeadline) {
       const snapshot = context.snapshot();
-      const said = snapshot.notice;
-      if (said !== null && spoke === null) spoke = said.message;
-      // Order matters: if the app spoke *first*, that is a real 15a failure and must be
-      // reported as one. Only a film that stopped while the app was still silent means the
-      // window never existed.
-      if (spoke === null && STARVED.includes(snapshot.session.state)) {
+      // ⚠️ **The state is read BEFORE the notice, and that ordering is the fix.**
+      //
+      // The first version of this guard read the notice first and only abandoned the
+      // window `if (spoke === null)`. It reasoned that a app which spoke *first* was a
+      // real 15a failure. But the two arrive in the SAME snapshot when the television
+      // starves — on 2026-09-09 the set stopped at ~6.0 s and the sentence came at 6.1 s —
+      // so `spoke` was set on that poll and the guard never fired. `m2` reported 107/108
+      // exit 1 against a product that had done the right thing, which is the exact defect
+      // #68 was raised to remove, surviving its own fix.
+      //
+      // **15a is "silent *while playback is unaffected*".** Once the film has stopped,
+      // speaking is not merely allowed, it is 15b and it is required. So a stopped film
+      // ends the gradeable window FULL STOP, whatever the notice says in the same instant,
+      // and only a notice seen while the session is still live can violate anything.
+      if (STARVED.includes(snapshot.session.state)) {
         starvedAfterMs = context.mono() - removedAt;
         break;
       }
+      const said = snapshot.notice;
+      if (said !== null && spoke === null) spoke = said.message;
       await context.sleep(100);
     }
     if (spoke === null && starvedAfterMs !== null) {
