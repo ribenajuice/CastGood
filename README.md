@@ -22,7 +22,7 @@ Two things to know before you read further:
 
 ## Install it
 
-You will have an installer called `CastGood-Setup-0.1.0.exe`. Double-click it.
+You will have an installer called `CastGood-Setup-1.0.0.exe`. Double-click it.
 
 **Two things happen that look alarming and are not.**
 
@@ -31,7 +31,7 @@ You will have an installer called `CastGood-Setup-0.1.0.exe`. Double-click it.
 
 It installs per-user, with no admin rights beyond that one prompt, and adds Start-menu and desktop shortcuts.
 
-`CastGood-Setup-0.1.0.exe /NOFIREWALL` skips the firewall step entirely.
+`CastGood-Setup-1.0.0.exe /NOFIREWALL` skips the firewall step entirely.
 
 ## Use it
 
@@ -64,7 +64,7 @@ npm install              # first time only
 scripts/win-build.sh     # takes a few minutes the first time
 ```
 
-Either way the result is `dist/installer/CastGood-Setup-0.1.0.exe`. Copy it to the Windows side and double-click it.
+Either way the result is `dist/installer/CastGood-Setup-1.0.0.exe`. Copy it to the Windows side and double-click it.
 
 `scripts/deploy.sh --tag` tags a version, and a GitHub workflow builds the installer and attaches it to a Release page. That is the entire distribution story: there is no server and nothing to deploy anywhere.
 

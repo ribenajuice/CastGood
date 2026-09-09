@@ -14,7 +14,7 @@ Nothing else. There is no account to create, nothing to sign in to, and no other
 
 ## Installing it
 
-You will have a file called something like `CastGood-Setup-0.1.0.exe`, either handed to you or downloaded. Double-click it.
+You will have a file called something like `CastGood-Setup-1.0.0.exe`, either handed to you or downloaded. Double-click it.
 
 **Two things will happen that look alarming and are not.**
 

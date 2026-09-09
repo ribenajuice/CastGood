@@ -5,6 +5,30 @@ All user-visible changes, in plain language, newest first.
 <!-- ## YYYY-MM-DD
 - You can now … -->
 
+
+## 2026-09-09 — CastGood 1.0.0, and it is public
+
+**CastGood is finished enough to give to people, so it is 1.0.0 and it is on the internet.**
+The source, the installer and the whole test suite now live in a public repository, and there
+is a Releases page you can send someone a link to.
+
+**Turn the television down from the app.** The volume slider and a mute button sit under the
+transport controls, and the number you see is the number the television reported — never the
+number CastGood asked for. Move the volume on the set's own remote, or from a phone, and the
+app catches up within two seconds. Changing the volume never touches the film.
+
+**What "1.0.0" is claiming, stated plainly.** Every promise this app makes has been measured
+on real televisions rather than asserted. On the day of this release, five scripted test runs
+went green together against one build — 303 separate checks, across three televisions and two
+films — covering discovery, casting, pausing, seeking, position accuracy, recovering from a
+wifi drop, a phone stealing the television, converting a film the set cannot play, subtitles
+and their timing, and the new volume control. A run that never reaches a television reports
+that it could not run, rather than reporting success, so a pass cannot be faked.
+
+**What it deliberately still does not do.** There is no queue yet: you play one film at a
+time. It is Windows-only, it is unsigned — so Windows will warn you the first time — and it
+sends nothing anywhere. No account, no telemetry, no cloud.
+
 ## 2026-09-08 — CastGood has a licence, and the installer says what it carries
 
 **CastGood is now MIT licensed.** Anyone can use the code, change it, or build on it. Until
