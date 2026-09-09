@@ -27,7 +27,7 @@
  */
 
 /** The kinds of thing a log gives away, each with its own counter. */
-type Kind = 'user' | 'film' | 'device' | 'ip';
+type Kind = 'user' | 'film' | 'device' | 'id' | 'ip';
 
 export interface RedactionReport {
   readonly text: string;
@@ -67,6 +67,26 @@ function escapeForRegExp(value: string): string {
 const IPV4 = /\b(?!127\.0\.0\.1\b)((?:\d{1,3}\.){3}\d{1,3})\b/g;
 
 /**
+ * Dotted quads that are **not addresses** and must survive.
+ *
+ * ⚠️ Found by reading a real export rather than by a test: every `netmask` was being turned
+ * into `<ip-4>`. A netmask identifies nobody, and replacing it **loses** the size of the
+ * subnet — which is exactly the sort of thing a network bug turns on — while spending
+ * placeholder numbers on values that carry no meaning. Redacting something harmless is not
+ * free: it makes the report worse without making it safer.
+ */
+const NOT_AN_ADDRESS = new Set([
+  '255.255.255.255',
+  '255.255.255.0',
+  '255.255.0.0',
+  '255.0.0.0',
+  '0.0.0.0',
+]);
+
+/** A television's stable id. Not personal, but a persistent fingerprint of somebody's hardware. */
+const DEVICE_ID = /\b[0-9a-f]{32}\b/g;
+
+/**
  * Replace every identifying value with a stable numbered placeholder.
  *
  * Order matters: **the username goes last**. It is a substring of nearly every file path, so
@@ -77,6 +97,7 @@ export function redact(text: string, subjects: RedactionSubjects): RedactionRepo
     user: new Map(),
     film: new Map(),
     device: new Map(),
+    id: new Map(),
     ip: new Map(),
   };
 
@@ -107,7 +128,13 @@ export function redact(text: string, subjects: RedactionSubjects): RedactionRepo
     out = out.replaceAll(new RegExp(escapeForRegExp(name), 'g'), () => placeholder('device', name));
   }
 
-  out = out.replace(IPV4, (match) => placeholder('ip', match));
+  out = out.replace(IPV4, (match) =>
+    NOT_AN_ADDRESS.has(match) ? match : placeholder('ip', match),
+  );
+
+  // The friendly name is already `<device-N>`, which is what correlation needs. The raw id
+  // adds nothing a reader can use and is a stable identifier for a specific box.
+  out = out.replace(DEVICE_ID, (match) => placeholder('id', match));
 
   // ⚠️ **Last, and inside paths as well as fields.** 249 of the 249 occurrences measured were
   // in `C:\\Users\\<name>\\…`, so a replacement that only matched a `"user"` field would have
@@ -124,6 +151,7 @@ export function redact(text: string, subjects: RedactionSubjects): RedactionRepo
       user: seen.user.size,
       film: seen.film.size,
       device: seen.device.size,
+      id: seen.id.size,
       ip: seen.ip.size,
     },
   };
