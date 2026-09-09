@@ -381,6 +381,17 @@ export interface HostQuestion {
   readonly safeIndex: number;
 }
 
+export interface DiagnosticsView {
+  readonly label: string;
+  /**
+   * 25i. What is removed and what is kept, **before** the control is pressed.
+   *
+   * Silence here would be the app deciding something private on somebody's behalf, which is
+   * the thing question 45 was asked to avoid.
+   */
+  readonly note: string;
+}
+
 export interface ViewModel {
   /** The `docs/DESIGN-SYSTEM.md` §2 name of this state. On the DOM for QA to read. */
   readonly stateName: string;
@@ -410,6 +421,16 @@ export interface ViewModel {
    * than looking pressable and doing nothing.
    */
   readonly questionPending: boolean;
+  /**
+   * The one control that is **never absent and never disabled** — story 25, criterion 25a.
+   *
+   * ⚠️ **It cannot live in the StatusRegion.** §1 allows that region exactly one answer to
+   * *"what is happening right now"*, and this is not an event. More importantly, the
+   * StatusRegion's actions change with the state — and the states somebody will actually
+   * press this in are the broken ones. **A diagnostic that needs a working app is a
+   * diagnostic that is absent exactly when it is wanted.**
+   */
+  readonly diagnostics: DiagnosticsView;
 }
 
 /**
@@ -1787,6 +1808,13 @@ export function buildViewModel(
     devices: asking ? inertDevices(devicesOf(snapshot)) : devicesOf(snapshot),
     preparation: preparationOf(snapshot),
     questionPending: hostQuestion !== null,
+    // ⚠️ Built unconditionally, with no reference to `snapshot` or `asking`. That is not an
+    // oversight to tidy up later: the moment this depends on a state, it acquires a state in
+    // which it is missing, and 25a exists because those are precisely the states it is for.
+    diagnostics: {
+      label: 'Save a report…',
+      note: 'Names, your Windows username and network addresses are replaced before it is saved. CastGood never sends it anywhere — you choose who sees it.',
+    },
   };
 }
 

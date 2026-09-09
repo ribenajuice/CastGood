@@ -20,6 +20,7 @@ import { StatusRegion } from './components/StatusRegion.js';
 import { FirewallPanel } from './components/FirewallPanel.js';
 import { PreparationPanel } from './components/PreparationPanel.js';
 import { SubtitlesPanel } from './components/SubtitlesPanel.js';
+import { DiagnosticsPanel } from './components/DiagnosticsPanel.js';
 import { TransportPanel } from './components/TransportPanel.js';
 import { INITIAL_SNAPSHOT } from './state/initial-snapshot.js';
 import {
@@ -432,6 +433,15 @@ export default function App(): JSX.Element {
               }}
             />
           )}
+          {/* ⚠️ Outside every conditional above, and that is the point. Each of those panels
+              is absent in some state; this one is absent in none, because the states it
+              exists for are the ones where the others have gone (25a). */}
+          <DiagnosticsPanel
+            diagnostics={vm.diagnostics}
+            onSave={() => {
+              sendIntent({ type: 'diagnostics.export' });
+            }}
+          />
         </>
       }
       devices={
