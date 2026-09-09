@@ -2,13 +2,14 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import fsp from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import { createEngine, MEDIA_SERVER, parseIntent, resolveAppPaths } from '../engine/index.js';
 import type { Engine } from '../engine/index.js';
 import { FIREWALL_RULES, IPC_CHANNELS, SUBTITLE_EXTENSIONS, VIDEO_EXTENSIONS } from './ipc.js';
 import { choiceFromButton, questionFor, quitPromptFor, safeChoiceFor } from './quit.js';
 import type { QuitChoice, QuitPromptKind } from './quit.js';
 import type { FirewallOutcome, HostQuestion } from './ipc.js';
+import { DIAGNOSTIC_MENU_LABEL } from './diagnostics-menu.js';
 
 /**
  * The Electron main process: a thin host, and nothing else.
@@ -689,6 +690,45 @@ if (!app.requestSingleInstanceLock()) {
     window.focus();
   });
 
+  /**
+   * The application menu, which exists only to carry *Save a diagnostic report…* — story 25.
+   *
+   * ⚠️ **A menu item is a stronger answer to 25a than a panel was.** A panel had to be built
+   * unconditionally and kept out of every inert-while-asking path; this is outside the view
+   * model entirely, so there is no state in which it can fail to render.
+   *
+   * The rest of the template is Electron's own roles, so the standard shortcuts a person
+   * expects — copy, paste, close, devtools in a dev build — keep working. Building a menu
+   * replaces the default one wholesale, and losing Ctrl+C to add a diagnostic would be a poor
+   * trade.
+   */
+  function installMenu(engine: Engine): void {
+    const template: Parameters<typeof Menu.buildFromTemplate>[0] = [
+      {
+        label: 'File',
+        submenu: [
+          {
+            label: DIAGNOSTIC_MENU_LABEL,
+            // No confirmation dialog: the app forbids modals (founder's ruling,
+            // 2026-08-30) and `quit-prompt.test.ts` fails any message box, including a new
+            // one that has nothing to do with quitting. The sentence 25i asks for is the
+            // first thing in the report, read in the window Explorer opens — before
+            // anything is sent, which is the moment that criterion was protecting.
+            click: () => {
+              engine.dispatch({ type: 'diagnostics.export' });
+            },
+          },
+          { type: 'separator' },
+          { role: 'quit' },
+        ],
+      },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+      { role: 'windowMenu' },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  }
+
   app.whenReady().then(
     async () => {
       const current = createEngine({
@@ -712,6 +752,7 @@ if (!app.requestSingleInstanceLock()) {
       await current.start();
 
       wireIpc(current);
+      installMenu(current);
       mainWindow = createWindow(current);
     },
     (error: unknown) => {
