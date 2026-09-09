@@ -694,6 +694,16 @@ if (!app.requestSingleInstanceLock()) {
       const current = createEngine({
         paths: resolveAppPaths(),
         appVersion: app.getVersion(),
+        // Story 25, criterion 25b. The engine writes the report; revealing it needs
+        // Explorer, which needs Electron, which the engine may never import
+        // (`engine-boundary.test.ts`). So the host hands the capability in.
+        //
+        // ⚠️ `showItemInFolder`, not `openPath`. 25b asks for the file to be SELECTED:
+        // a path in a sentence is a thing to retype, a highlighted file is a thing to
+        // drag into a message — and dragging it is the entire point.
+        revealFile: (filePath: string) => {
+          shell.showItemInFolder(filePath);
+        },
         ...(isDev ? { logLevel: 'debug' as const } : {}),
       });
       engine = current;
