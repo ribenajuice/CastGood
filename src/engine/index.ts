@@ -1,7 +1,8 @@
 import fsp from 'node:fs/promises';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createFileSink, createLogger, systemClock } from './logging/index.js';
 import type { Clock, Logger, LogLevel, LogSink } from './logging/index.js';
+import { exportDiagnostics } from './diagnostics/export.js';
 import { resolveAppPaths, type AppPaths } from './paths.js';
 import { EMPTY_SNAPSHOT, type Intent, type StateSnapshot } from './protocol/index.js';
 import type {
@@ -139,6 +140,19 @@ export interface EngineOptions {
   readonly mdns?: Mdns;
   /** 0 asks the OS for any free port. The app uses the configured default. */
   readonly mediaPort?: number;
+  /**
+   * Show a file to the person — story 25, criterion 25b.
+   *
+   * ⚠️ **The engine writes the file; the host reveals it.** Revealing means Explorer, which
+   * means Electron, which the engine may never import (`engine-boundary.test.ts`). So the
+   * host passes this in and the engine calls it. Absent — in tests and the selftest —
+   * nothing is revealed and the export still happens, which is why the return value carries
+   * the path rather than relying on a folder having opened.
+   *
+   * 25b asks for the file to be **selected**, not for a path in a sentence. A path is a
+   * thing to retype; a highlighted file is a thing to drag into a message.
+   */
+  readonly revealFile?: (filePath: string) => void;
   /** Scripted interface list, so 11d's "this PC went offline" is testable in WSL. */
   readonly networkInterfaces?: InterfaceSource;
   /**
@@ -505,6 +519,49 @@ export function createEngine(options: EngineOptions = {}): Engine {
      * to ask for.
      */
     sessionLive: boolean;
+  }
+
+  /**
+   * Story 25 — write a redacted report of this run and show it to the person.
+   *
+   * ⚠️ **The subjects come from what the engine has actually seen**, never from guessing at
+   * the shape of a path. Device names come from discovery, film names from the file that was
+   * chosen, and the username from the data directory this process was given — which is where
+   * all 249 occurrences measured on 2026-09-09 actually were.
+   */
+  async function exportReport(): Promise<void> {
+    // `C:\Users\<name>\AppData\Local\CastGood` — the segment after `Users`.
+    const parts = paths.dataDir.split(/[\\/]/);
+    const afterUsers = parts.findIndex((part) => part.toLowerCase() === 'users');
+    const username = afterUsers >= 0 ? (parts[afterUsers + 1] ?? null) : null;
+
+    const outcome = await exportDiagnostics({
+      logDir: paths.logDir,
+      // Beside the data directory, never inside logDir (25g).
+      destinationDir: join(paths.dataDir, 'reports'),
+      subjects: {
+        username,
+        deviceNames: discovery.devices().map((device) => device.friendlyName),
+        fileNames: file === null ? [] : [basename(file.path)],
+      },
+    }).catch((error: unknown) => {
+      logger.error('diagnostics.export_failed', { error });
+      return null;
+    });
+
+    if (outcome === null) return;
+    if (outcome.kind === 'nothing-to-send') {
+      logger.info('diagnostics.nothing_to_send', { why: outcome.why });
+      return;
+    }
+    logger.info('diagnostics.exported', {
+      lines: outcome.lines,
+      bytes: outcome.bytes,
+      // ⚠️ The path is logged; its CONTENTS are not. A log line quoting the report would
+      // put the very thing that was just redacted back into the file it came from.
+      filePath: outcome.filePath,
+    });
+    options.revealFile?.(outcome.filePath);
   }
 
   function notify(listener: SnapshotListener): void {
@@ -2885,6 +2942,12 @@ export function createEngine(options: EngineOptions = {}): Engine {
           founderActed = true;
           clearSubtitle('the founder turned subtitles off');
           push();
+          return;
+        case 'diagnostics.export':
+          // Deliberately NOT `founderActed = true`. That flag means the person did
+          // something to the film; saving a report touches nothing on any television, and
+          // 25a's whole point is that this works when the session is already broken.
+          void exportReport();
           return;
         case 'subtitles.nudge':
           founderActed = true;

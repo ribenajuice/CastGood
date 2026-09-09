@@ -117,6 +117,14 @@ export const intentSchema = z.discriminatedUnion('type', [
    * thing that knows which. A press with nothing to retry is ignored, not an error.
    */
   z.object({ type: z.literal('subtitles.retry') }),
+  /**
+   * Story 25. Writes a redacted report of this run and opens the folder it is in.
+   *
+   * ⚠️ **It carries nothing.** No destination, no address, no "share with" — there is
+   * deliberately nothing in this shape that could grow into somewhere to send it, and
+   * `test/architecture/no-telemetry.test.ts` is what stops one being added.
+   */
+  z.object({ type: z.literal('diagnostics.export') }),
 ]);
 
 export type Intent = z.infer<typeof intentSchema>;
