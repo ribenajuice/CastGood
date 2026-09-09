@@ -27,8 +27,7 @@
  */
 
 /** The kinds of thing a log gives away, each with its own counter. */
-const KINDS = ['user', 'film', 'device', 'ip'] as const;
-type Kind = (typeof KINDS)[number];
+type Kind = 'user' | 'film' | 'device' | 'ip';
 
 export interface RedactionReport {
   readonly text: string;
