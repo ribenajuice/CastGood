@@ -88,8 +88,25 @@ async function main(): Promise<number> {
   }
 
   let segments: string[] = [];
+  let durations: number[] = [];
   if (segmentDir !== null) {
     const names = (await fsp.readdir(segmentDir)).filter((n) => n.endsWith('.ts')).sort();
+    // ⚠️ **Read the real durations, never assume them.** ffmpeg writes its own playlist
+    // beside the segments; its EXTINF lines are the truth. The first run of this spike
+    // declared 4.0 s for segments that were 10.43 s, which is a malformed playlist, and
+    // the television refused it — correctly. Guessing here produced a false CONTRADICTED
+    // about a handover that was never attempted.
+    const own = (await fsp.readdir(segmentDir)).find((n) => n.endsWith('.m3u8'));
+    if (own !== undefined) {
+      const text = await fsp.readFile(path.join(segmentDir, own), 'utf8');
+      durations = [...text.matchAll(/#EXTINF:([0-9.]+)/g)].map((m) => Number(m[1]));
+    }
+    if (durations.length < names.length) {
+      throw new SpikeAbort(
+        `could not read a duration for every segment in ${segmentDir} (${String(durations.length)} of ${String(names.length)}). ` +
+          'A playlist that declares the wrong duration is refused by the television, and the refusal would be reported as a finding about the queue.',
+      );
+    }
     if (names.length === 0) {
       throw new SpikeAbort(
         `--hls-segments named a directory with no .ts files in it: ${segmentDir}. ` +
@@ -128,6 +145,7 @@ async function main(): Promise<number> {
     firstFile: first,
     secondFile: second,
     hlsSegments: segments,
+    hlsDurations: durations,
     logger,
     transport: tlsTransportFactory,
   });

@@ -5,6 +5,7 @@ import { networkInterfaces } from 'node:os';
 import { CAST } from '../config.js';
 import type { Logger } from '../logging/index.js';
 import type { TransportFactory } from '../cast/index.js';
+import { buildPlaylist } from '../media-server/hls.js';
 import {
   NS_CONNECTION,
   NS_MEDIA,
@@ -97,6 +98,16 @@ export interface SpikeM5bOptions {
   readonly secondFile: string;
   /** Segment files for the growing-playlist leg, in order. Omit to skip that leg. */
   readonly hlsSegments?: readonly string[];
+  /**
+   * Per-segment durations, in seconds, in the same order as `hlsSegments`.
+   *
+   * ⚠️ **Not a formality, and guessing it is how the first run failed.** The playlist
+   * declared `EXTINF:4.0` and `TARGETDURATION:4` for segments that were really 10.43 s
+   * each. HLS requires `TARGETDURATION` to be at least the longest segment, so the
+   * playlist was malformed and the `Chromecast Ultra` answered `LOAD_FAILED` — correctly.
+   * The television was right and the instrument was wrong.
+   */
+  readonly hlsDurations?: readonly number[];
   readonly logger: Logger;
   readonly transport: TransportFactory;
 }
@@ -141,7 +152,13 @@ function localAddressFor(target: string): string {
  * an XHR. The 2026-08-19 finding is that its absence fails with no diagnostic
  * at all, which is the worst way for a spike to be wrong.
  */
-function serve(options: SpikeM5bOptions, published: { count: number }) {
+function serve(
+  options: SpikeM5bOptions,
+  published: { count: number },
+  // Filled in once the socket has a port: the playlist names segments absolutely, so it
+  // cannot be written until we know the address the television will be told to use.
+  origin: { base: string },
+) {
   const files = new Map<string, string>([
     ['first.mp4', options.firstFile],
     ['second.mp4', options.secondFile],
@@ -161,15 +178,23 @@ function serve(options: SpikeM5bOptions, published: { count: number }) {
       // `#EXT-X-ENDLIST` until they all are. That absence is what tells the
       // receiver the film is still arriving, and it is the whole point of the leg.
       const count = Math.min(published.count, (options.hlsSegments ?? []).length);
-      const lines = [
-        '#EXTM3U',
-        '#EXT-X-VERSION:3',
-        '#EXT-X-TARGETDURATION:4',
-        '#EXT-X-MEDIA-SEQUENCE:0',
-      ];
-      for (let i = 0; i < count; i += 1) lines.push('#EXTINF:4.0,', `seg${String(i)}.ts`);
-      if (count === (options.hlsSegments ?? []).length) lines.push('#EXT-X-ENDLIST');
-      const body = lines.join('\n') + '\n';
+      const durations = options.hlsDurations ?? [];
+      // ⚠️ **The engine's own serializer, not a second one written here.**
+      //
+      // The hand-rolled version this replaces was refused by the `Chromecast Ultra` twice.
+      // It declared `TARGETDURATION:4` for 10.43 s segments — malformed — and it omitted
+      // `#EXT-X-PLAYLIST-TYPE:EVENT`, whose absence tells a receiver the list is finished
+      // when it is still growing. `buildPlaylist` gets both right and is the code that
+      // actually serves head-start films to these televisions today, so a spike that
+      // reimplements it is measuring a playlist the product never sends.
+      const body = buildPlaylist({
+        baseUrl: `${origin.base}/`,
+        segments: Array.from({ length: count }, (_, i) => ({
+          name: `seg${String(i)}.ts`,
+          durationSec: durations[i] ?? 1,
+        })),
+        ended: count === (options.hlsSegments ?? []).length,
+      });
       response.writeHead(200, {
         'Content-Type': 'application/vnd.apple.mpegurl',
         'Content-Length': Buffer.byteLength(body),
@@ -325,13 +350,15 @@ export async function runSpikeM5b(options: SpikeM5bOptions): Promise<SpikeM5bRep
   const findings: Finding[] = [];
   const local = localAddressFor(options.address);
   const published = { count: 1 };
-  const server = serve(options, published);
+  const origin = { base: '' };
+  const server = serve(options, published, origin);
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const address = server.address();
   if (address === null || typeof address === 'string') {
     throw new SpikeAbort('the media server did not take a port');
   }
   const base = `http://${local}:${String(address.port)}`;
+  origin.base = base;
   options.logger.info('spike.serving', { base });
 
   const session = await openSession({
