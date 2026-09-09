@@ -18,12 +18,12 @@ import { pickVideoFile } from '../../src/renderer/bridge.js';
  */
 
 interface CastGoodWindow {
-  castgood?: { pickVideoFile?: (startIn?: string) => Promise<string | null> };
+  castgood?: { pickVideoFile?: (startIn?: string) => Promise<string[]> };
 }
 
 const host = globalThis as unknown as { window?: CastGoodWindow };
 
-function withPicker(pick: (startIn?: string) => Promise<string | null>): void {
+function withPicker(pick: (startIn?: string) => Promise<string[]>): void {
   host.window = { castgood: { pickVideoFile: pick } };
 }
 

@@ -87,19 +87,19 @@
     },
     {
       "file": "src/renderer/components/QueueRail.tsx",
-      "line": 121,
+      "line": 129,
       "rule": "22a/below-floor",
       "detail": "text-sm"
     },
     {
       "file": "src/renderer/components/QueueRail.tsx",
-      "line": 190,
+      "line": 201,
       "rule": "22a/below-floor",
       "detail": "text-sm"
     },
     {
       "file": "src/renderer/components/QueueRail.tsx",
-      "line": 191,
+      "line": 202,
       "rule": "22a/below-floor",
       "detail": "text-sm"
     },

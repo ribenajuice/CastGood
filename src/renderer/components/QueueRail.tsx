@@ -85,60 +85,71 @@ function QueueRow({
       {showLineAbove && (
         <div aria-hidden="true" className="absolute -top-1 h-0.5 w-full bg-accent" />
       )}
-      <button
-        type="button"
-        draggable
-        onDragStart={() => {
-          onDragStart(index);
-        }}
-        aria-pressed={row.selected}
-        {...(row.current ? { 'aria-current': 'true' as const } : {})}
-        tabIndex={focused ? 0 : -1}
-        onFocus={() => {
-          onFocus(index);
-        }}
-        onKeyDown={onKeyDown}
-        onClick={() => {
-          // 24ab: selects. Never loads, stops, pauses or replaces what is on screen.
-          onSelect(row.id);
-        }}
-        className={`flex min-h-11 w-full items-start gap-2.5 rounded-box bg-surface text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-          row.selected
-            ? 'border-2 border-accent px-2.5 py-[9px]'
-            : 'border border-line-strong px-[11px] py-2.5'
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          className={`mt-1 size-4 shrink-0 rounded-pill border ${
-            row.selected ? 'border-accent bg-accent' : 'border-line-strong'
+      {/* ⚠️ The row and its Remove sit SIDE BY SIDE, never stacked.
+          
+          The first version positioned Remove absolutely over the row, and on a scene-release
+          name — which wraps, because §12 forbids truncating it — the button landed on top of
+          the text and covered part of the filename. §12's own width arithmetic says what
+          this should have been all along: 199 px of text, 54 px of gap, 44 px of button.
+          The space is budgeted, so it must be reserved rather than borrowed. */}
+      <div className="flex items-start gap-2.5">
+        <button
+          type="button"
+          draggable
+          onDragStart={() => {
+            onDragStart(index);
+          }}
+          aria-pressed={row.selected}
+          {...(row.current ? { 'aria-current': 'true' as const } : {})}
+          tabIndex={focused ? 0 : -1}
+          onFocus={() => {
+            onFocus(index);
+          }}
+          onKeyDown={onKeyDown}
+          onClick={() => {
+            // 24ab: selects. Never loads, stops, pauses or replaces what is on screen.
+            onSelect(row.id);
+          }}
+          className={`flex min-h-11 min-w-0 flex-1 items-start gap-2.5 rounded-box bg-surface text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+            row.selected
+              ? 'border-2 border-accent px-2.5 py-[9px]'
+              : 'border border-line-strong px-[11px] py-2.5'
           }`}
-        />
-        <span className="min-w-0 flex-1">
-          {/* §12: the name wraps and is never truncated. A scene-release name costs rows on
+        >
+          <span
+            aria-hidden="true"
+            className={`mt-1 size-4 shrink-0 rounded-pill border ${
+              row.selected ? 'border-accent bg-accent' : 'border-line-strong'
+            }`}
+          />
+          <span className="min-w-0 flex-1">
+            {/* §12: the name wraps and is never truncated. A scene-release name costs rows on
               screen; an ellipsis costs the ability to tell two episodes apart. */}
-          <span className="block text-base font-semibold break-words">{row.name}</span>
-          <span className={`mt-0.5 block text-sm ${row.current ? 'text-text' : 'text-muted'}`}>
-            {row.current ? 'Playing' : (row.verdict ?? 'Queued')}
+            <span className="block text-base font-semibold break-words">{row.name}</span>
+            <span className={`mt-0.5 block text-sm ${row.current ? 'text-text' : 'text-muted'}`}>
+              {row.current ? 'Playing' : (row.verdict ?? 'Queued')}
+            </span>
           </span>
-        </span>
-      </button>
-      {/* 24e: the playing row carries no Remove at all — not a disabled one. */}
-      {row.canRemove && (
-        <span className="absolute top-1.5 right-1.5">
-          <Button
-            small
-            square
-            ariaLabel={`Remove ${row.name}`}
-            onClick={() => {
-              // 24d: one press, no confirmation. Nothing on disk is touched.
-              onRemove(row.id);
-            }}
-          >
-            ×
-          </Button>
-        </span>
-      )}
+        </button>
+        {/* 24e: the playing row carries no Remove at all — not a disabled one. A row without
+          one keeps the full width for its name rather than leaving a hole where a control
+          would be. */}
+        {row.canRemove && (
+          <span className="shrink-0">
+            <Button
+              small
+              square
+              ariaLabel={`Remove ${row.name}`}
+              onClick={() => {
+                // 24d: one press, no confirmation. Nothing on disk is touched.
+                onRemove(row.id);
+              }}
+            >
+              ×
+            </Button>
+          </span>
+        )}
+      </div>
       {showLineBelow && (
         <div aria-hidden="true" className="absolute -bottom-1 h-0.5 w-full bg-accent" />
       )}
