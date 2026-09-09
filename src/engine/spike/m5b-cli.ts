@@ -12,6 +12,19 @@
 //   --second <path>       the film loaded over it (required)
 //   --hls-segments <dir>  a directory of .ts segments, published one at a time,
 //                         to measure the GROWING-PLAYLIST handover as well
+// ⚠️ HOW TO MAKE SEGMENTS THAT A TELEVISION WILL ACTUALLY ACCEPT. Segments can only
+// start on a keyframe, so `-hls_time 4` alone is a FLOOR and not a promise — without
+// `-force_key_frames` ffmpeg cuts wherever keyframes happen to fall. On 2026-09-09 that
+// produced 10.43 s segments against a playlist declaring 4 s, and the Chromecast Ultra
+// refused them BOTH over a running film and from cold. The engine passes the flag; a
+// spike that does not is testing a stream the product never produces:
+//
+//   ffmpeg -ss 0 -t 120 -i "<film>" \
+//     -c:v libx264 -preset veryfast -crf 20 -c:a aac \
+//     -force_key_frames "expr:gte(t,n_forced*4)" \
+//     -hls_time 4 -hls_list_size 0 -hls_playlist_type event \
+//     -hls_segment_filename "<dir>\seg%03d.ts" "<dir>\out.m3u8"
+//
 //   --hls-first           THE CONTROL. Load that playlist as the FIRST load on a
 //                         fresh session instead of over a running film. If it plays,
 //                         the segments are sound and a refusal during a handover is a
