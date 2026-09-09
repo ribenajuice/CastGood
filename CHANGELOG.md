@@ -6,6 +6,18 @@ All user-visible changes, in plain language, newest first.
 - You can now … -->
 
 
+## 2026-09-09 — CastGood told you the wrong television had gone
+
+**If a television dropped off mid-film, CastGood could name the wrong one.** It would say
+*"Lost connection to …"* and then give you the name of a **different television — one that
+was working perfectly** and sitting in the same room. Your place in the film was saved
+correctly and the buttons did the right thing; only the name in the sentence was wrong.
+
+It happened when the set playing the film went off the network entirely — unplugged, or
+power cut — while a different television was selected in the list. That is exactly the
+moment you need to be told the truth, so it is worth a release of its own.
+
+
 ## 2026-09-09 — CastGood 1.0.0, and it is public
 
 **CastGood is finished enough to give to people, so it is 1.0.0 and it is on the internet.**

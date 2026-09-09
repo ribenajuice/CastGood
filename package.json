@@ -1,6 +1,6 @@
 {
   "name": "castgood",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Reliable local video casting to Chromecast devices from a Windows PC.",
   "author": "CastGood",
