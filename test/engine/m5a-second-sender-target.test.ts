@@ -9,6 +9,18 @@ import { resolveAppPaths } from '../../src/engine/paths.js';
 import { startFakeReceiver, type FakeReceiver } from './fake-receiver/index.js';
 
 /**
+ * The 23c leg spends its full wait when the second sender is pointed elsewhere, and a
+ * timeout is a worse verdict than a failed assertion: it says nothing about which
+ * television was moved. This is sized so the run always reaches its verdict.
+ *
+ * ⚠️ It is a named constant rather than a literal with a comment above it because a
+ * comment between a closing `}` and `it()`'s trailing timeout argument has nowhere
+ * stable to sit — Prettier rewrote it into a different order on every run and never
+ * converged, which failed `format:check` on a file that had just been formatted.
+ */
+const REACHES_ITS_VERDICT_MS = 120_000;
+
+/**
  * **23c's second sender has to reach the television under test, and nothing else.**
  *
  * On 2026-09-08 the `volume` scenario read 10/11 on the `Home Theatre TV`, with
@@ -163,9 +175,6 @@ describe('the second sender 23c opens', () => {
         await fs.rm(directory, { recursive: true, force: true });
       }
     },
-    // The 23c leg spends its full wait when the second sender is pointed elsewhere, and
-    // a timeout is a worse verdict than a failed assertion: it says nothing about which
-    // television was moved. This is sized so the run always reaches its verdict.
-    120_000,
+    REACHES_ITS_VERDICT_MS,
   );
 });

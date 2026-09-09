@@ -49,7 +49,9 @@ try {
 // future build is LGPL or something else, this should be reconsidered rather than
 // silently keep publishing a GPL tarball.
 if (typeof build.license !== 'string' || !/GPL/i.test(build.license)) {
-  console.log(`[ffmpeg-source] recorded licence is "${build.license}" — no GPL source obligation, nothing to do`);
+  console.log(
+    `[ffmpeg-source] recorded licence is "${build.license}" — no GPL source obligation, nothing to do`,
+  );
   process.exit(0);
 }
 

@@ -4641,8 +4641,7 @@ export async function runSelftest(options: SelftestOptions): Promise<SelftestVer
     const address = typeof found?.['address'] === 'string' ? found['address'] : undefined;
     // 8009 on every real device; a scripted receiver takes whatever port it was given.
     const portRecord = forDevice.filter((record) => typeof record['port'] === 'number').at(-1);
-    const devicePort =
-      typeof portRecord?.['port'] === 'number' ? portRecord['port'] : CAST.port;
+    const devicePort = typeof portRecord?.['port'] === 'number' ? portRecord['port'] : CAST.port;
 
     // Which run of the scenario is in progress. Outside an aggregate this is whatever the
     // command line asked for and never changes; inside `m3c` each leg sets it.
