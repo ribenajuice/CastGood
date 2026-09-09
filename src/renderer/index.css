@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './motion.css';
+
+/*
+ * The window ground, and nothing else.
+ *
+ * Visual design is M4 and `docs/DESIGN-SYSTEM.md` owns it; the tokens it defines live in
+ * `tokens.css`, imported above, and the two animations it allows are in `motion.css`. This
+ * file spends two tokens and stops there — a palette, a type scale or a spacing system
+ * appearing in here would be a second design system.
+ *
+ * `--bg` is paired with BrowserWindow's `backgroundColor` in `src/main/main.ts`: the two
+ * must be the same colour or the window flashes a different ground before the renderer
+ * paints. That pairing used to be a comment asking you to remember; it is now checked by
+ * `test/design/tokens.test.ts`.
+ */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}

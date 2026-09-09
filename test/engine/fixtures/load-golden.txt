@@ -1,0 +1,24 @@
+# CastGood — the recorded LOAD payloads that criterion 19a is measured against.
+#
+# Equivalent to main @ 47d3bae (2026-08-27), the last commit before M3c step 3 touched
+# src/engine/cast/index.ts. Recorded by test/engine/m3c-load-golden.test.ts driving the
+# real engine through real intents against test/engine/fake-receiver.
+#
+# The shape that produced each one:
+#   plain   Cars.mp4    — H.264 High 4.1 1080p + stereo AAC, Tier 1, cast untouched
+#   hls     Cars.mkv    — 4K HEVC + DTS, Tier 3, head start, growing playlist
+#   resume  Cars.mp4    — the same Tier 1 file, cast again at 0:10:00 (16c)
+# Device: the fake receiver's "Family room TV" (md=Chromecast), on 127.0.0.1.
+#
+# Substituted, exactly and only: the per-session mount token and the media server port.
+# Everything else is the bytes. If this file has to change, the change is a wire change,
+# and 19a is a promise that it does not happen by accident.
+
+## plain
+{"type":"LOAD","sessionId":"session-1","media":{"contentId":"http://<HOST>/m/<TOKEN>/Cars.mp4","contentType":"video/mp4","streamType":"BUFFERED","metadata":{"metadataType":0,"title":"Cars.mp4"}},"autoplay":true,"currentTime":0,"requestId":2}
+
+## hls
+{"type":"LOAD","sessionId":"session-1","media":{"contentId":"http://<HOST>/m/<TOKEN>/stream.m3u8","contentType":"application/vnd.apple.mpegurl","streamType":"BUFFERED","metadata":{"metadataType":0,"title":"Cars.mkv"}},"autoplay":true,"currentTime":0,"requestId":2}
+
+## resume
+{"type":"LOAD","sessionId":"session-1","media":{"contentId":"http://<HOST>/m/<TOKEN>/Cars.mp4","contentType":"video/mp4","streamType":"BUFFERED","metadata":{"metadataType":0,"title":"Cars.mp4"}},"autoplay":true,"currentTime":600,"requestId":2}

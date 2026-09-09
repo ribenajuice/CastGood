@@ -1,0 +1,59 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+
+    # WHY TWO GROUPS
+    # --------------
+    # This was one group, `["*"]`, and twice that cost us the whole batch. #12 and
+    # #19 both died at `npm ci` — not at a test, before any check ran — because a
+    # single package in the batch could not be installed. In #19 that package was
+    # TypeScript 7, and it took seven healthy updates down with it, including an
+    # Electron patch.
+    #
+    # The TypeScript compiler and the lint tooling that plugs into its internals
+    # have to move together: typescript-eslint pins an exact peer ceiling on
+    # typescript (`>=4.8.4 <6.1.0` as of 8.68.0), so a compiler bump on its own is
+    # unresolvable by construction. Grouping them means Dependabot proposes the
+    # pair in one PR and the peer range resolves itself. Everything else is
+    # independent of that fight and should never wait on it.
+    groups:
+      typescript-toolchain:
+        patterns:
+          - typescript
+          - typescript-eslint
+          - "@typescript-eslint/*"
+      all-dependencies:
+        patterns: ["*"]
+        # Listed second, but be explicit: a dependency matching two groups lands in
+        # the first, and relying on ordering is not worth the ambiguity.
+        exclude-patterns:
+          - typescript
+          - typescript-eslint
+          - "@typescript-eslint/*"
+
+    # TEMPORARY — REMOVE WHEN typescript-eslint SUPPORTS TypeScript 7
+    # --------------------------------------------------------------
+    # TypeScript 7 is the native (Go) rewrite: `typescript@7.0.2` ships platform
+    # binaries instead of the in-process JS compiler API that typescript-eslint is
+    # built on. As of 2026-08-28 no published typescript-eslint accepts it — not
+    # 8.68.0 (latest), not 8.68.1-alpha.6 (canary), and there is no v9 line on any
+    # dist-tag. So the bump is not merely red, it is unmergeable, and without this
+    # it returns as a red PR every week.
+    #
+    # HOW TO CHECK WHETHER THIS CAN GO:
+    #   npm view typescript-eslint@latest peerDependencies
+    # If the `typescript` range admits 7.x, delete this whole `ignore:` block. The
+    # typescript-toolchain group above will then bring the compiler and the lint
+    # tooling in together, which is the update that actually installs.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7.0.0"]

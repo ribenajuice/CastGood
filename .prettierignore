@@ -1,0 +1,16 @@
+dist/
+out/
+node_modules/
+# Fetched binaries and their upstream licence text — not ours to format.
+resources/bin/
+package-lock.json
+coverage/
+
+# Prose is owned by people and by other agents (docs/DESIGN-SYSTEM.md in particular).
+# Prettier formats code, not the project's memory.
+docs/
+.github/
+*.md
+
+# Never reformat harness config
+.claude/

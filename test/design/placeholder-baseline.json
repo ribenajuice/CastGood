@@ -1,0 +1,140 @@
+{
+  "colourLiterals": [],
+  "typeSizes": [
+    {
+      "file": "src/renderer/components/Button.tsx",
+      "line": 75,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/DevicePanel.tsx",
+      "line": 52,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/DevicePanel.tsx",
+      "line": 68,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/DevicePanel.tsx",
+      "line": 73,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/DevicePanel.tsx",
+      "line": 79,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/DevicePanel.tsx",
+      "line": 101,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/DevicePanel.tsx",
+      "line": 102,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/DisabledReason.tsx",
+      "line": 15,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/FilePanel.tsx",
+      "line": 42,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/FilePanel.tsx",
+      "line": 53,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/FirewallPanel.tsx",
+      "line": 35,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/FirewallPanel.tsx",
+      "line": 40,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/PreparationPanel.tsx",
+      "line": 35,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/PreparationPanel.tsx",
+      "line": 58,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/SubtitlesPanel.tsx",
+      "line": 61,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/SubtitlesPanel.tsx",
+      "line": 134,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/SubtitlesPanel.tsx",
+      "line": 219,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/TransportPanel.tsx",
+      "line": 77,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/TransportPanel.tsx",
+      "line": 82,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/TransportPanel.tsx",
+      "line": 92,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/TransportPanel.tsx",
+      "line": 114,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    },
+    {
+      "file": "src/renderer/components/VolumeControl.tsx",
+      "line": 232,
+      "rule": "22a/below-floor",
+      "detail": "text-sm"
+    }
+  ],
+  "opacityAsState": [],
+  "motion": [],
+  "modality": []
+}

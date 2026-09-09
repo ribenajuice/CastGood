@@ -1,0 +1,42 @@
+MIT License
+
+Copyright (c) 2026 Darren Mullighan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+CastGood's own source is MIT. The installer additionally redistributes third-party
+software under its own terms — most importantly ffmpeg, which is GPL-3.0-or-later,
+and is not covered by the licence above.
+
+ffmpeg is invoked as a separate program over a command-line boundary, never linked
+and never through FFI (docs/DECISIONS.md, 2026-08-13). That arm's-length arrangement
+is what lets CastGood's own source carry a permissive licence while the installer
+ships a GPL binary beside it.
+
+The installed application carries, next to the executable:
+
+  resources/bin/LICENSE.ffmpeg.txt   ffmpeg's GPL-3.0 text
+  resources/bin/BUILD.ffmpeg.txt     the exact configuration it was built with
+  resources/bin/ffmpeg-build.json    version, builder, and the upstream commit
+  THIRD-PARTY-NOTICES.txt            every bundled npm package and its licence
+
+The corresponding source for the bundled ffmpeg is the upstream commit named in
+`ffmpeg-build.json`, and the build is published unmodified by https://www.gyan.dev/ffmpeg/builds/.

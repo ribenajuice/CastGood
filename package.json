@@ -1,0 +1,58 @@
+{
+  "name": "castgood",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reliable local video casting to Chromecast devices from a Windows PC.",
+  "author": "CastGood",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/main/main.cjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build:renderer && npm run build:main",
+    "build:renderer": "vite build",
+    "build:main": "node scripts/build-main.mjs",
+    "build:win": "node scripts/fetch-ffmpeg.mjs && node scripts/generate-notices.mjs && npm run build && electron-builder --win nsis --publish never && node scripts/verify-ffmpeg-packaged.cjs --packaged",
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "selftest": "node scripts/selftest.mjs",
+    "ffmpeg:fetch": "node scripts/fetch-ffmpeg.mjs",
+    "ffmpeg:check": "node scripts/fetch-ffmpeg.mjs --check",
+    "notices": "node scripts/generate-notices.mjs",
+    "notices:check": "node scripts/generate-notices.mjs --check"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.4.4",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.0",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.9.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,24 @@
+name: Feature idea
+description: Something the product should do
+labels: [feature]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: What should happen?
+      placeholder: When a user does X, they should see/get Y.
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: How important?
+      options: ["Now", "Next", "Someday"]
+    validations:
+      required: true

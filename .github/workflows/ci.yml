@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# CastGood is a desktop app for one Windows PC. There is no server, no cloud, and
+# nothing to deploy — see docs/DECISIONS.md, "Release means a Windows installer exists".
+#
+# WHAT CI CAN AND CANNOT SEE
+# --------------------------
+# No runner has a Chromecast on its LAN, and no runner has a Windows GUI session.
+# So CI proves the *logic*, never the product:
+#   - it CAN run every engine test: the engine imports nothing from Electron, so the
+#     classifier, the state machine, range parsing and (from M1) the fake-receiver
+#     integration tests all run headless on ubuntu-latest.
+#   - it CANNOT verify discovery, casting, playback or anything involving a real
+#     device. Those are checked by `npm run selftest` against real hardware and by
+#     the manual QA checklist, both run before a milestone is signed off.
+# "CI is green" therefore means "the logic holds", never "it works on the TV".
+#
+# `npm run selftest` is deliberately absent from every job below and must stay
+# absent. It is not only unwired here — scripts/selftest.mjs refuses to run
+# anywhere but Windows and exits 2 ("could not run"), so a selftest can never
+# report a pass without a real device having played real video (PRD 13c).
+
+# ACTION VERSIONS
+# ---------------
+# Floating major tags, bumped to the Node 24 line on 2026-08-20 because the Node 20
+# runtime is deprecated and every one of these was being force-run on 24 anyway. Nothing
+# in the majors that were skipped affects this repo, and it is worth writing down so the
+# next bump does not have to re-derive it:
+#   checkout v5 -> node24, v6 -> credentials persisted to a separate file, v7 -> refuses to
+#     check out a **fork** PR under `pull_request_target`/`workflow_run`. This repo runs on
+#     plain `pull_request` against its own branches and has neither trigger, so v7's
+#     restriction cannot bite. If a fork ever contributes, that is the line to re-read.
+#   setup-node v6 -> automatic caching limited to npm; harmless here, `cache: npm` is set
+#     explicitly. v7 -> ESM, plus cache-key outputs we do not use.
+#   cache v5 -> node24 and a runner floor of 2.327.1 (GitHub-hosted runners are well past
+#     it). v6 -> ESM.
+# Dependabot watches these monthly, so the next move should arrive as a small PR.
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: Lint, typecheck, engine tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        # 21j compares src/engine/ against main, so the guard needs main to exist.
+        # A shallow checkout has neither main nor origin/main and the check goes quiet.
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Electron's binary is a 350 MB download and CI never launches a window.
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Engine tests
+        run: npm run test
+
+      # Catches the renderer and main-process bundles breaking, without packaging.
+      - name: Build renderer and main
+        run: npm run build
+
+  installer:
+    name: Windows installer builds
+    runs-on: windows-latest
+    # The one thing a Linux runner genuinely cannot check: that electron-builder
+    # still produces an installable .exe.
+    # From M1 this job is also the only automated check on build/installer.nsh:
+    # NSIS compiles the firewall include here, so a syntax error fails the build.
+    # It never *runs* the installer, so no firewall rule is ever added to a runner.
+    # Windows minutes bill at 2x on private repos; one job per PR stays well inside
+    # the free allowance, and a packaging break found at release time is worse.
+    #
+    # It builds the installer and **does not keep it** — see the note where the upload
+    # step used to be.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The pinned ffmpeg archive is 110 MB and identical on every run until
+      # build/ffmpeg-pin.json changes, so the key is that file's hash — a new pin misses
+      # the cache and downloads, which is exactly the behaviour we want. The cache lives
+      # where scripts/fetch-ffmpeg.mjs puts it: outside the repo, so nothing about the
+      # working tree depends on it and a cache miss only costs time.
+      - name: Cache the pinned ffmpeg archive
+        uses: actions/cache@v6
+        with:
+          path: ~\AppData\Local\CastGood\build-cache\ffmpeg
+          key: ffmpeg-${{ hashFiles('build/ffmpeg-pin.json') }}
+
+      # Fetches and SHA-256-verifies ffmpeg, builds, packages, then verifies the binaries
+      # are really inside the packaged app. A runner has no ffmpeg installed and never
+      # gets one — if this step passes, the bundling works on a clean machine.
+      - name: Build the NSIS installer
+        run: npm run build:win
+
+      # **The installer is built and deliberately not kept** (founder's decision,
+      # 2026-08-20). It used to be uploaded so a reviewer could download a PR build,
+      # which nobody ever did — `scripts/win-build.sh` produces the same file locally in
+      # about three minutes and copies it back to `dist/installer/`.
+      #
+      # Keeping it was expensive in a way that is easy to miss, because the cost is not
+      # in the run you are looking at. Every PR run kept a **153 MB** installer for 14
+      # days, so 42 of them were alive at once — **4.24 GB against a personal account's
+      # 500 MB allowance**, and growing by one installer per push. The build minutes were
+      # never the problem (about a fifth of the monthly allowance); the storage was 8.5x
+      # over it.
+      #
+      # Nothing about what this job *proves* has changed. Its value is that
+      # `npm run build:win` succeeds on a clean machine with no ffmpeg installed — the
+      # fetch, the SHA-256 verify, electron-builder, the NSIS include, and the two gates
+      # that check the binaries really are inside the packaged app. All of that is in the
+      # step above. The `.exe` afterwards was a convenience, not evidence.
+      #
+      # If a build is ever needed from a PR: `gh pr checkout <n> && scripts/win-build.sh`.

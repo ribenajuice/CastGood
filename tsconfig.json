@@ -1,0 +1,16 @@
+{
+  // Tooling project (editors, ESLint type-aware rules). It sees every source file.
+  // `npm run typecheck` deliberately checks the two *stricter* projects instead:
+  //   tsconfig.node.json — engine/main + their tests, no DOM lib (the engine must never touch a browser API)
+  //   tsconfig.web.json  — renderer + test/renderer, no node types
+  // Renderer tests live in the web project because they import renderer code, and renderer
+  // code legitimately touches `window`. Putting them in the node project would have meant
+  // adding the DOM lib there, which is the one thing that split exists to prevent.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "*.config.ts"]
+}

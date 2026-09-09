@@ -1,0 +1,63 @@
+/*
+ * The two animations §10 permits, and nothing else.
+ *
+ * *"No new motion. Section 8's two are parameterised so they can be built identically
+ * twice."* They are built once, here, so *"identically twice"* is not a thing anyone has
+ * to get right by hand. Their durations are tokens; only the choreography lives here,
+ * because which property moves between which values is not a value the rest of the app
+ * ever needs to read.
+ *
+ * **This is the only file in the renderer allowed to write `opacity`,** and only in the
+ * two places §10 states one: inside these keyframes, and inside the reduced-motion
+ * fallback. Everywhere else `opacity` is forbidden outright — *"opacity on a dark surface
+ * destroys measured contrast and cannot be stated in a table"* — and `21d` enforces that.
+ * The exemption is by **rule, not by file**: `scan.ts` allows an `opacity` inside an
+ * allowed `@keyframes` or a `prefers-reduced-motion` block wherever it appears, and
+ * catches every other one, including in this file.
+ */
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes hairline-slide {
+  0% {
+    left: -32%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* 9 px, --text, 1.1 s ease-in-out. The dim end measures 4.58:1 on --surface: the trough
+   is still legible, which is the point of a dot that says "working". */
+.pulse-dot {
+  animation: pulse-dot var(--dur-pulse) ease-in-out infinite;
+}
+
+/* A 32 %-wide runner crossing a 3 px bed, 1.5 s ease-in-out, left to right. */
+.hairline-runner {
+  animation: hairline-slide var(--dur-hairline) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still, not absent. An indicator that disappears under a motion preference tells the
+     founder nothing is happening, which is the opposite of what it is for. */
+  .pulse-dot {
+    animation: none;
+    opacity: 0.75;
+  }
+
+  .hairline-runner {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+  }
+}

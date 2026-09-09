@@ -1,0 +1,67 @@
+name: Release
+
+# A release is an installer on a GitHub Release page. That is the whole
+# distribution story: the founder opens the page, downloads the .exe, double-clicks.
+# Nothing is deployed anywhere, because there is nowhere to deploy to.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    name: Build and publish the Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same cache as CI, same key. A release must not be the first time the pinned
+      # ffmpeg is fetched from a cold start, and a cache miss here is only slower.
+      - name: Cache the pinned ffmpeg archive
+        uses: actions/cache@v6
+        with:
+          path: ~\AppData\Local\CastGood\build-cache\ffmpeg
+          key: ffmpeg-${{ hashFiles('build/ffmpeg-pin.json') }}
+
+      - name: Build the NSIS installer
+        run: npm run build:win
+
+      # The bundled ffmpeg is GPL-3.0-or-later, so whoever gets the .exe is owed its
+      # source. GPL v3 §6(d) asks for it "from the same place" as the binary — this
+      # puts the exact tarball on the same Release page rather than pointing at a
+      # repository we do not control. The commit is read from ffmpeg-build.json,
+      # which the build above wrote, so the source always matches these binaries.
+      - name: Fetch the GPL source for the bundled ffmpeg
+        run: node scripts/fetch-ffmpeg-source.mjs
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/installer/*.exe
+            dist/installer/ffmpeg-*-source-*.tar.gz
+          # Unsigned by decision (docs/DECISIONS.md). Say so where it will be read.
+          body: |
+            CastGood ${{ github.ref_name }}
+
+            Download the `.exe` below and double-click it. The installer is unsigned,
+            so Windows shows "Windows protected your PC" the first time:
+            **More info → Run anyway**. Installs per-user; no admin rights needed.
+
+            ---
+
+            CastGood is MIT licensed. It bundles **ffmpeg**, which is
+            GPL-3.0-or-later and is run as a separate program, never linked. The
+            `ffmpeg-*-source-*.tar.gz` below is the exact source those binaries were
+            built from; `LICENSE.ffmpeg.txt` and `BUILD.ffmpeg.txt` install beside
+            the app. Third-party notices ship as `THIRD-PARTY-NOTICES.txt`.
+          fail_on_unmatched_files: true

@@ -1,0 +1,30 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+
+# Dependencies & build output
+node_modules/
+dist/
+
+# The bundled ffmpeg/ffprobe (~200 MB of Windows binaries). Never in git: they are
+# reproducible from build/ffmpeg-pin.json, which pins the version and the SHA-256 of
+# every file, and `npm run build:win` fetches and verifies them before packaging.
+# Also excluded from scripts/win-sync.sh — see the note there.
+resources/bin/
+coverage/
+.vite/
+# NB: `build/` is deliberately NOT ignored — electron-builder reads installer
+# resources (icon, NSIS include) from there, and those must be committed.
+
+# The Windows runner copy at C:\CastGood is derived and disposable — only
+# scripts/win-sync.sh writes to it, and it is never committed from either side.
+.package-lock.sha256
+
+# Local-only Claude Code settings
+.claude/settings.local.json
+
+# OS noise
+.DS_Store
+.claude/worktrees/

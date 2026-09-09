@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "The exact ffmpeg build CastGood ships. Changing anything here is a decision, not a chore:",
+    "record it in docs/DECISIONS.md and re-measure the installer size.",
+    "A floating alias (ffmpeg-release-essentials.zip, BtbN's 'latest' tag) is a build that",
+    "changes underneath us between two runs of the same commit, so every URL below names a",
+    "version and every file below carries the SHA-256 that scripts/fetch-ffmpeg.mjs verifies.",
+    "test/architecture/ffmpeg-bundled.test.ts fails the build if that stops being true."
+  ],
+  "version": "8.1.2",
+  "variant": "essentials_build",
+  "platform": "win32-x64",
+  "linkage": "static",
+  "license": "GPL-3.0-or-later",
+  "builder": "https://www.gyan.dev/ffmpeg/builds/",
+  "upstreamSource": "https://github.com/FFmpeg/FFmpeg/commit/38b88335f9",
+  "archive": {
+    "url": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
+    "sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
+    "bytes": 109728040,
+    "rootDir": "ffmpeg-8.1.2-essentials_build"
+  },
+  "files": [
+    {
+      "from": "bin/ffmpeg.exe",
+      "to": "ffmpeg.exe",
+      "sha256": "1326dde4c84ff1f96fe6b8916c5bed29e163e9b5dccf995f6f3db069d143ec5e",
+      "bytes": 101897728,
+      "required": true
+    },
+    {
+      "from": "bin/ffprobe.exe",
+      "to": "ffprobe.exe",
+      "sha256": "b49ccc7c6547b141ad5a2f6ec69cc04323d7133d7704d70b331b904c63eecb07",
+      "bytes": 101692928,
+      "required": true
+    },
+    {
+      "from": "LICENSE",
+      "to": "LICENSE.ffmpeg.txt",
+      "required": true
+    },
+    {
+      "from": "README.txt",
+      "to": "BUILD.ffmpeg.txt",
+      "required": true
+    }
+  ]
+}
