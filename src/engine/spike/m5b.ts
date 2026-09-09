@@ -253,6 +253,32 @@ async function handOver(
     30_000,
   );
 
+  // ⚠️ **A REFUSED LOAD IS A RUN THAT COULD NOT HAPPEN, NEVER A FINDING.**
+  //
+  // The first version of this spike lacked this guard and it cost a false verdict on the
+  // very first run: the `Chromecast Ultra` answered the growing playlist with `LOAD_FAILED`
+  // twice, the leg recorded "never reached PLAYING", and the report declared assumption 1
+  // **CONTRADICTED** — a verdict about a handover the television had never once attempted.
+  // That is exactly what `m3.ts` warns about in the same words, having been bitten by it in
+  // SPIKE-1, and it is worse here: a false CONTRADICTED would reword 24m and slow the queue
+  // between every pair of films, on the strength of a bug in the test.
+  //
+  // **The refusal does not arrive as the reply.** `LOAD_FAILED` carries the LOAD's own
+  // requestId but reaches us *after* an unsolicited `MEDIA_STATUS` has already resolved the
+  // request, so checking the returned payload catches nothing. The socket's own record is
+  // the only honest place to look.
+  await new Promise((resolve) => setTimeout(resolve, 4_000));
+  const refusal = session.wire
+    .slice(beforeMark)
+    .find((f) => f.dir === 'in' && (f.type === 'LOAD_FAILED' || f.type === 'LOAD_CANCELLED'));
+  if (refusal !== undefined) {
+    throw new SpikeAbort(
+      `the television refused the ${kind} load (${String(refusal.type)}). Nothing about a ` +
+        `${kind} handover was measured — this is a run that could not happen, not a finding. ` +
+        'The wire trace in the engine log has the exact frames.',
+    );
+  }
+
   const gapMs = await waitForPlaying(session, transportIdBefore, mark, 30_000);
 
   // What the receiver said about itself across the handover.

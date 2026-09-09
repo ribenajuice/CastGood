@@ -49,7 +49,8 @@ usage() { sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; }
 sync=1
 json_out=""
 saw_device=0
-saw_file=0
+saw_first=0
+saw_second=0
 passthrough=()
 
 # A WSL path is the natural thing to type here and always wrong: everything runs on the
@@ -71,10 +72,17 @@ while [ $# -gt 0 ]; do
     --json)
       [ $# -ge 2 ] || fail "--json needs a file path"
       json_out="$2"; shift 2 ;;
-    --file)
-      [ $# -ge 2 ] || fail "--file needs a video file"
-      saw_file=1
-      passthrough+=("--file" "$(to_windows "$2")"); shift 2 ;;
+    --first)
+      [ $# -ge 2 ] || fail "--first needs a video file"
+      saw_first=1
+      passthrough+=("--first" "$(to_windows "$2")"); shift 2 ;;
+    --second)
+      [ $# -ge 2 ] || fail "--second needs a video file"
+      saw_second=1
+      passthrough+=("--second" "$(to_windows "$2")"); shift 2 ;;
+    --hls-segments)
+      [ $# -ge 2 ] || fail "--hls-segments needs a directory of .ts files"
+      passthrough+=("--hls-segments" "$(to_windows "$2")"); shift 2 ;;
     --device|--address)
       [ $# -ge 2 ] || fail "$1 needs a value"
       saw_device=1
@@ -84,7 +92,8 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$saw_device" = "1" ] || fail "--device is required — the name exactly as it appears in Google Home"
-[ "$saw_file" = "1" ] || fail "--file is required — pass a film this television plays natively"
+[ "$saw_first" = "1" ] || fail "--first is required — the film that is already playing"
+[ "$saw_second" = "1" ] || fail "--second is required — the film loaded over it. This measures a HANDOVER; one film measures nothing."
 
 command -v cmd.exe >/dev/null 2>&1 || fail \
   "cmd.exe is not callable from WSL (interop off?). Check /proc/sys/fs/binfmt_misc/WSLInterop."
