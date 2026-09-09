@@ -34,6 +34,7 @@ export const INITIAL_SNAPSHOT: StateSnapshot = {
     state: 'idle',
     flags: { reconnecting: false, reattaching: false, yielded: false, networkDown: false },
     deviceId: null,
+    deviceName: null,
     positionSec: 0,
     durationSec: 0,
     canSeek: false,

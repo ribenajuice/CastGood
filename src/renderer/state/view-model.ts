@@ -673,6 +673,32 @@ function deviceName(snapshot: StateSnapshot): string {
   return inUse?.friendlyName ?? selected?.friendlyName ?? 'your TV';
 }
 
+/**
+ * The television this message is **about** — which is not always the one the next press
+ * would go to, and issue #66 is what happens when the two are confused.
+ *
+ * `deviceName` above answers *"where will Cast send it?"*, and for *Stopped* and
+ * *Finished* that is right: it is the founder's ruling of 2026-09-03, and it deliberately
+ * prefers the **selected** device once the session is over. **Two screens are not asking
+ * that question.** *"Lost connection to \<name\>"* and *"\<name\> is now playing …"* are
+ * statements about the set that was **holding the film**, and naming a different
+ * television there is worse than saying nothing — on 2026-09-09 it named a healthy set
+ * sitting in the same room.
+ *
+ * ⚠️ **It reads the name the engine remembered, never the device list.** A lost connection
+ * ends in `stopped`, so the rule above would have skipped the session's device anyway; but
+ * even without that, a television that has lost power **is no longer in
+ * `discovery.devices`** and cannot be looked up at all. The lookup is kept only as a
+ * fallback for sessions that predate the remembered name.
+ */
+function heldDeviceName(snapshot: StateSnapshot): string {
+  return (
+    snapshot.session.deviceName ??
+    findDevice(snapshot, snapshot.session.deviceId)?.friendlyName ??
+    'your TV'
+  );
+}
+
 interface StatusView {
   readonly stateName: string;
   readonly tone: Tone;
@@ -1163,7 +1189,7 @@ function statusOf(snapshot: StateSnapshot): StatusView {
   // Somebody else has the television. This is the explanation for everything else on the
   // screen, so it comes before any notice — and it is not a failure, so it must not be
   // allowed to fall through into the failure screen and pick up its styling.
-  if (session.flags.yielded) return yieldedStatus(snapshot, hasDevice, name);
+  if (session.flags.yielded) return yieldedStatus(snapshot, hasDevice, heldDeviceName(snapshot));
 
   // 11d: this PC, not the television. Nothing can be cast until it comes back, and saying
   // anything else — "Reconnecting to \<name\>" — would blame the wrong machine.
@@ -1174,7 +1200,7 @@ function statusOf(snapshot: StateSnapshot): StatusView {
   // 11c: ~30 s of failed reconnection, and only now. The name goes back into the sentence
   // here because the screen knows which television it means; the engine's notice does not.
   if (notice !== null && hasFailed(snapshot) && notice.kind === 'lost-connection') {
-    return lostConnectionStatus(snapshot, name);
+    return lostConnectionStatus(snapshot, heldDeviceName(snapshot));
   }
 
   // Two problems know exactly what they are and exactly what to offer, so they are

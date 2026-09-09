@@ -484,6 +484,18 @@ export interface SessionSnapshot {
   readonly state: SessionState;
   readonly flags: SessionFlags;
   readonly deviceId: DeviceId | null;
+  /**
+   * The friendly name of the television this session is on, **remembered rather than
+   * looked up**.
+   *
+   * ⚠️ A name resolved from the discovery list cannot survive the television leaving it,
+   * and a set that loses power leaves it — which is precisely the situation *"Lost
+   * connection to \<name\>"* describes. On 2026-09-09 that sentence named a different,
+   * healthy television in the room, because the id no longer resolved and the fallback was
+   * whichever row happened to be selected. The name is captured when the cast starts and
+   * held here for as long as the session refers to that device.
+   */
+  readonly deviceName: string | null;
   readonly positionSec: number;
   readonly durationSec: number;
   readonly canSeek: boolean;
@@ -604,6 +616,7 @@ export const EMPTY_SNAPSHOT: StateSnapshot = {
     state: 'idle',
     flags: { reconnecting: false, reattaching: false, yielded: false, networkDown: false },
     deviceId: null,
+    deviceName: null,
     positionSec: 0,
     durationSec: 0,
     canSeek: false,
