@@ -480,6 +480,21 @@ export interface VolumeSnapshot {
   readonly pending: number | null;
 }
 
+export interface QueueItemSnapshot {
+  readonly id: string;
+  readonly name: string;
+  /** 24a: each row carries its own verdict, from the same check a single film gets. */
+  readonly verdict: string | null;
+}
+
+export interface QueueSnapshot {
+  readonly items: readonly QueueItemSnapshot[];
+  /** 24ab. A selected row is one a press *would* start — never one that is starting. */
+  readonly selectedId: string | null;
+  /** The row on a television. It carries no Remove (24e). */
+  readonly playingId: string | null;
+}
+
 export interface SessionSnapshot {
   readonly state: SessionState;
   readonly flags: SessionFlags;
@@ -591,6 +606,13 @@ export interface StateSnapshot {
   readonly session: SessionSnapshot;
   /** The subtitle control. Always present; **Off** on every new film (19a). */
   readonly subtitles: SubtitlesSnapshot;
+  /**
+   * The queue — M5b. **Empty or one item is the v1 product untouched (24b).**
+   *
+   * The rail is not drawn at all below two items, so this being present costs nothing to
+   * anybody who chooses one film at a time.
+   */
+  readonly queue: QueueSnapshot;
   readonly notice: NoticeSnapshot | null;
 }
 
@@ -629,6 +651,7 @@ export const EMPTY_SNAPSHOT: StateSnapshot = {
     // engine publishes for every idle and verdict state.
     volume: null,
   },
+  queue: { items: [], selectedId: null, playingId: null },
   subtitles: {
     options: [],
     unavailable: [],

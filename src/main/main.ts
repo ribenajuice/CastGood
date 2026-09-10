@@ -421,8 +421,8 @@ function wireIpc(current: Engine): void {
   // Opening a file dialog is an OS integration, so it lives in main and not in the
   // engine. The renderer gets the path back and sends a normal `file.select` intent,
   // which is revalidated below like anything else arriving from a browser context.
-  ipcMain.handle(IPC_CHANNELS.pickVideoFile, async (event, startIn): Promise<string | null> => {
-    if (refusedWhileAsking('pickVideoFile')) return null;
+  ipcMain.handle(IPC_CHANNELS.pickVideoFile, async (event, startIn): Promise<string[]> => {
+    if (refusedWhileAsking('pickVideoFile')) return [];
     // *Find it again* (15b) opens where the file used to be. Anything else arriving here
     // is ignored rather than trusted: the renderer is a browser context, and a dialog is
     // not a place to open an arbitrary path a compromised one asked for.
@@ -430,7 +430,9 @@ function wireIpc(current: Engine): void {
       typeof startIn === 'string' && path.isAbsolute(startIn) ? path.dirname(startIn) : null;
     const options: Electron.OpenDialogOptions = {
       title: 'Choose a video',
-      properties: ['openFile'],
+      // 24a: the SAME picker, taking more than one at a time. Choosing one is unchanged and
+      // is still the v1 path (24b) — multi-select costs a person who wants one film nothing.
+      properties: ['openFile', 'multiSelections'],
       ...(folder === null ? {} : { defaultPath: folder }),
       filters: [
         { name: 'Video', extensions: [...VIDEO_EXTENSIONS] },
@@ -443,18 +445,20 @@ function wireIpc(current: Engine): void {
         window === null
           ? await dialog.showOpenDialog(options)
           : await dialog.showOpenDialog(window, options);
-      const chosen = result.canceled ? undefined : result.filePaths[0];
-      if (chosen === undefined) {
+      const chosen = result.canceled ? [] : result.filePaths;
+      if (chosen.length === 0) {
         // PRD 2b: cancelling leaves the previous selection exactly as it was.
         current.logger.info('file.picker_cancelled', {});
-        return null;
+        return [];
       }
-      current.logger.info('file.picked', { name: path.basename(chosen) });
+      // Names only. The paths are what the renderer needs; the log does not need to carry
+      // somebody's folder structure to say a picker worked.
+      current.logger.info('file.picked', { count: chosen.length });
       return chosen;
     } catch (error) {
       // A dialog that fails to open must read as "nothing was chosen", never as a crash.
       current.logger.error('file.picker_failed', { error });
-      return null;
+      return [];
     }
   });
 

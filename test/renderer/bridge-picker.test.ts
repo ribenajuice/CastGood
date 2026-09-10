@@ -18,12 +18,12 @@ import { pickVideoFile } from '../../src/renderer/bridge.js';
  */
 
 interface CastGoodWindow {
-  castgood?: { pickVideoFile?: (startIn?: string) => Promise<string | null> };
+  castgood?: { pickVideoFile?: (startIn?: string) => Promise<string[]> };
 }
 
 const host = globalThis as unknown as { window?: CastGoodWindow };
 
-function withPicker(pick: (startIn?: string) => Promise<string | null>): void {
+function withPicker(pick: (startIn?: string) => Promise<string[]>): void {
   host.window = { castgood: { pickVideoFile: pick } };
 }
 
@@ -33,7 +33,7 @@ afterEach(() => {
 
 describe('pickVideoFile', () => {
   it('never forwards a click event as the folder to open', async () => {
-    const pick = vi.fn(async () => Promise.resolve('C:\\Videos\\Bluey.mp4'));
+    const pick = vi.fn(async () => Promise.resolve(['C:\\Videos\\Bluey.mp4']));
     withPicker(pick);
 
     // What React actually hands a bare `onClick={handler}`: an object with DOM nodes and
@@ -48,11 +48,15 @@ describe('pickVideoFile', () => {
     const outcome = await pickVideoFile(clickEvent);
 
     expect(pick).toHaveBeenCalledWith(undefined);
-    expect(outcome).toEqual({ kind: 'selected', path: 'C:\\Videos\\Bluey.mp4' });
+    expect(outcome).toEqual({
+      kind: 'selected',
+      path: 'C:\\Videos\\Bluey.mp4',
+      paths: ['C:\\Videos\\Bluey.mp4'],
+    });
   });
 
   it('still opens where the file used to be when given a real path (15b)', async () => {
-    const pick = vi.fn(async () => Promise.resolve('C:\\Videos\\Bluey.mp4'));
+    const pick = vi.fn(async () => Promise.resolve(['C:\\Videos\\Bluey.mp4']));
     withPicker(pick);
 
     await pickVideoFile('C:\\Videos\\Bluey.mp4');
@@ -68,7 +72,8 @@ describe('pickVideoFile', () => {
   });
 
   it('reads a real cancel as cancelled, so the previous selection stands (2b)', async () => {
-    withPicker(() => Promise.resolve(null));
+    // 24a: a cancel is an EMPTY ARRAY now, not null. 2b is unchanged.
+    withPicker(() => Promise.resolve([]));
 
     await expect(pickVideoFile()).resolves.toEqual({ kind: 'cancelled' });
   });
