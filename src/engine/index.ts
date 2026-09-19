@@ -38,6 +38,7 @@ import { createCastClient, type CastClient, type TransportFactory } from './cast
 import {
   createSessionSupervisor,
   type DeviceSample,
+  type SessionSource,
   type SessionSubtitle,
   type SessionSupervisor,
 } from './session/index.js';
@@ -1451,6 +1452,67 @@ export function createEngine(options: EngineOptions = {}): Engine {
   }
 
   /**
+   * **24m/24n: what to hand a live session when the film on it genuinely finishes.**
+   *
+   * Called by `session/index.ts`'s `handleStatus` exactly once, exactly when a `FINISHED`
+   * status arrives — never for any other `idleReason`, which is 24n's whole guarantee and is
+   * enforced there, not here. Answering `null` means today's release runs unchanged: the
+   * end-of-queue screen (24o) if nothing follows, or 24x's ordinary wait if it does but is not
+   * ready.
+   *
+   * **Ready means exactly what look-ahead's own gate means** — `lookaheadTarget`'s mirror:
+   * a finished sibling on disk already (9a, whether look-ahead produced it or it was found
+   * there), or a verdict of `'none'`, which needs no preparation at all. Anything else —
+   * `remux`/`convert` still running, no verdict yet because the check has not run — is not
+   * ready, and is left for 24x rather than guessed at.
+   *
+   * **Moves `queue.playingId` on the way out.** This is the one call site that decides the
+   * queue has moved on to the next item, so it does the bookkeeping itself rather than
+   * leaving a caller to remember to — the same reasoning `onPrepared` already applies to
+   * `queueChecks`.
+   *
+   * **24y is out of scope here on purpose.** A next item that has cleared M3b's safe head
+   * start but whose conversion has not finished could in principle start the same way an
+   * already-playing film does, but that gate belongs to `startHeadStartCast` and duplicating
+   * it behind this function would be a second, unproven copy of 10h. Such an item answers
+   * `null` today and simply waits (24x) — no worse than a queue with no look-ahead at all.
+   *
+   * **24p/24aa (the carried subtitle choice) are also out of scope.** `wantedSubtitle()`
+   * reads state tied to the *selected file* in the picker, not to a queue item that is about
+   * to become current without ever passing through the picker — carrying a choice across
+   * that boundary is real, separate work this pass does not attempt. The advanced item plays
+   * with subtitles off.
+   */
+  function nextQueuedSource(): SessionSource | null {
+    const next = nextAfterPlaying(queue);
+    if (next === null) return null;
+    const check = queueCheckFor(next);
+    if (check === null) return null;
+    // `plan.kind === 'none'` is also what an *impossible* verdict carries (`classify.ts`'s
+    // `impossible()` hardcodes it) — a file with nothing readable in it needs no conversion
+    // for the same reason a file that needs none doesn't, and the two must not be confused
+    // here. `check.prepared` can never be set for one (`runQueueChecksAsync` only ever runs
+    // the pipeline when `plan.kind !== 'none'`), so the explicit exclusion only matters for
+    // the second half of this check — exactly the belt `lookaheadTarget` already wears
+    // alongside the same braces.
+    const ready =
+      check.prepared !== null ||
+      (check.verdict !== null &&
+        check.verdict.kind !== 'impossible' &&
+        check.verdict.plan.kind === 'none');
+    if (!ready) return null;
+    queue = { ...queue, playingId: next.id };
+    logger.info('queue.advance_ready', {
+      name: next.name,
+      // Which of the two shapes of *ready* this was, purely for a reader of the log —
+      // nothing downstream branches on it.
+      prepared: check.prepared !== null,
+    });
+    push();
+    return { path: check.prepared?.path ?? next.path, name: next.name };
+  }
+
+  /**
    * Show the look-ahead the film on screen — **the only way anything about it changes**.
    *
    * Called on every device status, every session change and every change to the queue. The
@@ -1651,6 +1713,15 @@ export function createEngine(options: EngineOptions = {}): Engine {
         // CastGood never puts its hand on a television it is not using. Everything inside
         // came off a receiver status; nothing here is computed (23b).
         volume: volumeSnapshot(),
+        // **24m.** `model.liveLoad` is the same field a subtitle reload or a repair sets —
+        // see `LiveLoadModel` — and `'queue-advance'` is the one `why` that means *this is
+        // the join between two queue items, not a correction mid-film*. The name comes from
+        // the queue itself rather than from `source`: `nextQueuedSource` has already moved
+        // `queue.playingId` to the item being loaded by the time this is ever true.
+        advancingTo:
+          model.liveLoad?.why === 'queue-advance'
+            ? (queue.items.find((item) => item.id === queue.playingId)?.name ?? null)
+            : null,
       },
       queue: {
         items: queue.items.map((item) => {
@@ -1821,6 +1892,9 @@ export function createEngine(options: EngineOptions = {}): Engine {
     onLoadRejected: (detail) => {
       onLoadRejected(detail);
     },
+    // 24m/24n. See `nextQueuedSource`'s own doc comment for what "ready" means and what
+    // this deliberately does not attempt.
+    nextQueuedSource: () => nextQueuedSource(),
     // Story 12's whole dependency on disk: the URL a reopened app has to republish.
     onSessionChanged: (info) => {
       // Nothing to come back to: the television has been let go, whether the film ended,

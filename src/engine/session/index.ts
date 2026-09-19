@@ -17,7 +17,13 @@ import { EngineError, isEngineError } from '../errors.js';
 import { clampOffsetMs, type Cue } from '../subtitles/cues.js';
 import { buildLadder, ladderCentreFor, rungFor, rungLabel } from '../subtitles/ladder.js';
 import { createPositionTracker, type PositionTracker } from './position.js';
-import { INITIAL_SESSION, reduce, type SessionEffect, type SessionModel } from './machine.js';
+import {
+  ACTIVE_STATES,
+  INITIAL_SESSION,
+  reduce,
+  type SessionEffect,
+  type SessionModel,
+} from './machine.js';
 
 /**
  * The most `SET_VOLUME`s that may be outstanding against a television at once.
@@ -251,6 +257,28 @@ export interface SessionSupervisorDeps {
    * from whatever is counting.
    */
   onDeviceSample?(sample: DeviceSample): void;
+  /**
+   * **The next queue item, ready to go — or `null`** (24m, 24n).
+   *
+   * Asked exactly once per session, and only at the one moment it matters: a device status
+   * has just reported `IDLE`/`FINISHED` for a film that genuinely played out. Answering with
+   * a source hands it straight into this same live session — no relaunch, no release, the
+   * television never sees its own home screen (24m). Answering `null` means there is nothing
+   * to hand over *right now* — no next item, or one that is not ready — and the session ends
+   * exactly as it always has: `send.stop` and `release`, the ordinary end of a film.
+   *
+   * **Never asked for any other `idleReason`.** An error, a refusal or a takeover is a
+   * television having a bad night, not a finish, and 24n forbids it from moving the queue on
+   * its own — `handleStatus` only calls this once `finished` (`idleReason === 'FINISHED'` and
+   * a real duration) is already true, so a caller that queues nothing here cannot advance
+   * anything by getting this wrong.
+   *
+   * **Owns moving `queue.playingId` on the way out**, because the caller — `src/engine/
+   * index.ts` — is the only place that holds the queue. Mutating it here, synchronously,
+   * mirrors `onPrepared`'s own mutation of `queueChecks`: one place decides the queue moved
+   * on, at the moment it actually does.
+   */
+  nextQueuedSource?(): SessionSource | null;
   /**
    * Overridden only by tests, so the retry *arithmetic* around a 14-second exchange is
    * checked in a second rather than in three quarters of a minute.
@@ -1181,6 +1209,48 @@ export function createSessionSupervisor(deps: SessionSupervisorDeps): SessionSup
         positionSec: reported,
         idleReason: status.idleReason,
       });
+
+      // **24m/24n.** Only a genuine finish may even ask the question — `finished` above is
+      // already exactly 24n's gate (`idleReason === 'FINISHED'` and a real duration), so an
+      // error, a refusal or a takeover falls straight through to the ordinary `device.idle`
+      // dispatch below and never reaches `nextQueuedSource`. `ACTIVE_STATES` guards the one
+      // other way this could go wrong: a `FINISHED` landing after the founder has already
+      // pressed Stop (or after some other path has already ended the session) must not be
+      // read as a live film to hand onward — there is no television session left to hand it
+      // into, and asking would risk mutating the queue for a session already over.
+      if (finished && ACTIVE_STATES.includes(model.state)) {
+        const next = deps.nextQueuedSource?.() ?? null;
+        if (next !== null) {
+          // **Not `deps.onDeviceSample?.()` again, not a second `position.sample` line**:
+          // this status has already been logged and reported above, in full, before the
+          // decision to advance was even asked. What follows belongs to the *next* item.
+          logger.info('queue.advance_started', { name: next.name });
+          source = next;
+          // Queued rather than called directly, exactly as `repairMediaPath` and
+          // `applySubtitle` are: `loadCurrentSource` mutates `mount`, `subtitleMount` and
+          // `connection`'s idea of what is loaded, and the queue is what keeps this from
+          // overlapping a repair or a subtitle reload that happened to be settling at the
+          // same instant — it simply runs after, rather than racing it.
+          queue = queue
+            .then(() => loadCurrentSource(0, { supersedes: 'queue-advance' }))
+            .catch((error: unknown) => {
+              logger.error('queue.advance_failed', { error });
+            });
+          // **24y is deliberately not attempted here.** A next item whose look-ahead
+          // conversion is still running but has already cleared M3b's safe head start could,
+          // in principle, be handed over the same way `startHeadStartCast` hands over a film
+          // that is already playing — but that gate, the guard it arms and the frontier it
+          // reports all live in `src/engine/index.ts`, and duplicating them behind this
+          // return would be a second, untested copy of 10h. `nextQueuedSource` answers `null`
+          // for that item today, which falls through to 24x's ordinary wait — the same wait
+          // the founder would meet if nothing had been prepared ahead at all.
+          return;
+        }
+        // `next === null`: no next item, or the next one is not ready. Falls through to the
+        // dispatch below exactly as it always has — 24o's end-of-queue screen, or 24x's plain
+        // preparation wait for whatever comes after this line runs.
+      }
+
       dispatch({
         type: 'device.idle',
         idleReason: status.idleReason,
@@ -1646,9 +1716,21 @@ export function createSessionSupervisor(deps: SessionSupervisorDeps): SessionSup
    * connection"* after ~30 s rather than a *"Couldn't play this file"* the moment a
    * half-returned network refuses a LOAD. The recovery deadline is the thing that speaks;
    * this stays quiet and lets it.
+   *
+   * **`queue-advance`** is the third: the film in `source` just finished and `handleStatus`
+   * is loading the next queue item into this same session (24m). It gets the same
+   * `session.live_load_started`/`settled` bracketing as the other two, for the same reason —
+   * a stray `IDLE` for the old media session must not read as this film ending a second time
+   * — but it does **not** take `repair`'s quiet path on failure: unlike a repair, nothing is
+   * already in flight for this to interrupt with an alarming sentence, and the ordinary
+   * `device.load_rejected` / `device.connect_failed` handling below is at least an honest,
+   * released ending rather than a silent hang. **What it does not yet do is 24u's**: naming
+   * the failure on the *item's own row* and offering *Skip to next* rather than ending the
+   * whole session. That is real, deliberately deferred work — see `nextQueuedSource` in
+   * `src/engine/index.ts` — not an oversight of this pass.
    */
   interface LoadOptions {
-    readonly supersedes?: 'repair' | 'subtitle';
+    readonly supersedes?: 'repair' | 'subtitle' | 'queue-advance';
   }
 
   async function loadCurrentSource(

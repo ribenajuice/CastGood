@@ -589,6 +589,15 @@ export interface SessionSnapshot {
    * the renderer needs no state of its own to decide whether to draw the control.
    */
   readonly volume: VolumeSnapshot | null;
+  /**
+   * **24m: the next film's name, exactly while it is being loaded into this live session.**
+   *
+   * Non-null for the same brief window a first cast's `'loading'` state covers, but for the
+   * join between two queue items rather than the start of an evening — the television is
+   * never released in between, so `state` itself does not change to say so. `null` the rest
+   * of the time, which is always except for that one window.
+   */
+  readonly advancingTo: string | null;
 }
 
 /**
@@ -684,6 +693,7 @@ export const EMPTY_SNAPSHOT: StateSnapshot = {
     // Nothing is playing, so there is no volume to show — 23i, and the same value the
     // engine publishes for every idle and verdict state.
     volume: null,
+    advancingTo: null,
   },
   queue: { items: [], selectedId: null, playingId: null },
   subtitles: {

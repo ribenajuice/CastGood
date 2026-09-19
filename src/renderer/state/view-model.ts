@@ -1256,6 +1256,20 @@ function statusOf(snapshot: StateSnapshot): StatusView {
   }
 
   if (isLive(session.state)) {
+    // 24m: the join between two queue items. `session.state` itself does not change for
+    // this — the television is never released between them — so it is checked ahead of the
+    // switch below rather than as one of its cases, the same way `flagOverride` outranks it.
+    if (session.advancingTo !== null) {
+      return {
+        stateName: 'Loading',
+        tone: 'working',
+        headline: `Starting ${session.advancingTo} on ${name}…`,
+        sub: 'The TV has been reached — the video is on its way.',
+        hairline: true,
+        actions: [action('stop', 'Cancel', false)],
+      };
+    }
+
     const override = flagOverride(snapshot, name);
     if (override !== null) return override;
 
