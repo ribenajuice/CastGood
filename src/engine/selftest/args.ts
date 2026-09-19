@@ -8,6 +8,8 @@ import {
   refuseRate,
   refuseBroken,
   refuseTiming,
+  refuseLookahead,
+  refuseFile2,
   runSelftest,
   SCENARIOS,
   type OutageKind,
@@ -65,6 +67,13 @@ export const USAGE = `CastGood selftest — proves real casting against a real d
                        already playing and measures what reaches the wire — how long the
                        track swap took, that four presses inside 400 ms cost exactly one
                        message, and that the film never stopped. Takes no value.
+  --lookahead          \`queue\` only: the one run this build proves — 24g/24h, item 2
+                       prepared while item 1 plays, the stall count across the whole of item
+                       1 read from the device's own samples. Needs --file2. Takes no value.
+  --file2     <path>   \`queue --lookahead\` only: the second film. Item 1 (--file) has to
+                       play natively; this one has to need a real conversion that races item
+                       1's own runtime — too fast or too slow and the run exits 2 rather than
+                       pretend it proved something it did not.
   --outage    <kind>   ${OUTAGES.join(' | ')} — which interruption \`recover\` produces (default: socket)
                        socket/heartbeat kill OUR connection and leave this PC's media
                        server reachable, so the television keeps getting the film's bytes
@@ -178,6 +187,7 @@ const argsSchema = z.object({
       return rate;
     }),
   'data-dir': z.string().trim().min(1).optional(),
+  file2: z.string().trim().min(1).optional(),
 });
 
 export interface ParsedArgs {
@@ -195,6 +205,10 @@ export interface ParsedArgs {
   readonly subtitleTiming: boolean;
   /** `--broken`, for `subtitles`' refusal run — 18j–18l. */
   readonly subtitleBroken: boolean;
+  /** `--lookahead`, for `queue`'s one built run — 24g/24h. */
+  readonly lookahead: boolean;
+  /** `--file2`, `queue --lookahead`'s second film. */
+  readonly secondFilePath: string | undefined;
   readonly dataDir: string | undefined;
   readonly help: boolean;
 }
@@ -207,6 +221,7 @@ export function parseArgs(argv: readonly string[]): ArgsResult {
   let help = false;
   let timing = false;
   let broken = false;
+  let lookahead = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index] as string;
@@ -222,6 +237,10 @@ export function parseArgs(argv: readonly string[]): ArgsResult {
     }
     if (token === '--broken') {
       broken = true;
+      continue;
+    }
+    if (token === '--lookahead') {
+      lookahead = true;
       continue;
     }
     if (!token.startsWith('--')) return { ok: false, reason: `unexpected argument: ${token}` };
@@ -252,6 +271,8 @@ export function parseArgs(argv: readonly string[]): ArgsResult {
         headStartWatchMs: undefined,
         subtitleTiming: false,
         subtitleBroken: false,
+        lookahead: false,
+        secondFilePath: undefined,
         dataDir: undefined,
         help: true,
       },
@@ -290,6 +311,13 @@ export function parseArgs(argv: readonly string[]): ArgsResult {
   // subtitle failure — which it would not be.
   const brokenRefusal = refuseBroken(parsed.data.scenario, broken, timing);
   if (brokenRefusal !== null) return { ok: false, reason: brokenRefusal };
+  // Sixth and seventh flags, the same rule twice more: `--lookahead` and `--file2` belong to
+  // one run of one scenario, and an operator who typed either for anything else would learn
+  // nothing from a silent no-op.
+  const lookaheadRefusal = refuseLookahead(parsed.data.scenario, lookahead);
+  if (lookaheadRefusal !== null) return { ok: false, reason: lookaheadRefusal };
+  const file2Refusal = refuseFile2(parsed.data.scenario, lookahead, parsed.data.file2);
+  if (file2Refusal !== null) return { ok: false, reason: file2Refusal };
 
   return {
     ok: true,
@@ -304,6 +332,8 @@ export function parseArgs(argv: readonly string[]): ArgsResult {
       headStartWatchMs: parsed.data.watch,
       subtitleTiming: timing,
       subtitleBroken: broken,
+      lookahead,
+      secondFilePath: parsed.data.file2,
       dataDir: parsed.data['data-dir'],
       help: false,
     },
@@ -365,6 +395,10 @@ export async function runSelftestCli(
     // then dropped produces a run that reports a pass for a promise it never tested.
     subtitleTiming: parsed.args.subtitleTiming,
     subtitleBroken: parsed.args.subtitleBroken,
+    lookahead: parsed.args.lookahead,
+    ...(parsed.args.secondFilePath === undefined
+      ? {}
+      : { secondFilePath: parsed.args.secondFilePath }),
     // The founder's instructions and the run's summary share one channel, and it is not
     // stdout — stdout carries the verdict JSON and `scripts/win-test.sh` parses it.
     instructions: (_stage, text) => io.err(text),

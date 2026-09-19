@@ -137,9 +137,17 @@ describe.concurrent('the command line cannot smuggle in a fake device', () => {
           // unsafeTestOverrides.
           'headStartWatchMs',
           'help',
+          // `--lookahead`, added for M5b step 2's `queue --lookahead` run. A bare boolean,
+          // exactly `--timing`/`--broken`'s own argument below: it takes no value at all, so
+          // it cannot name a device, a transport or a path.
+          'lookahead',
           'outage',
           'positionDurationMs',
           'scenario',
+          // `--file2`, added the same day: a second film path, admitted on exactly `filePath`'s
+          // own terms two lines above it — it names a file this run will cast, and nothing
+          // about a transport or an override.
+          'secondFilePath',
           // `--broken`, added 2026-08-28 for M3c step 6's refusal run — and the same
           // argument as the two below it: a bare boolean, no value of any kind, so there is
           // nothing in it that could name a device or a transport.
@@ -186,6 +194,11 @@ describe.concurrent('the command line cannot smuggle in a fake device', () => {
       // volume, a leg that began already at its target, a second sender that could not be
       // opened and a film that stopped playing are all runs that *could not happen*.
       'volume',
+      // M5b step 2: named by the same table's `queue --lookahead` row. `queue` on its own —
+      // the base scenario named in the same table (24a, 24c-e, 24m-r, 24w, 24z, 24aa, 24ab) —
+      // is not built yet, and `scenarioQueue` refuses to run without `--lookahead` rather
+      // than silently being a weaker thing under its own name.
+      'queue',
       'm1',
       'm2',
       'm3',
@@ -287,6 +300,47 @@ describe.concurrent('the command line cannot smuggle in a fake device', () => {
       parseArgs(['--device', 'TV', '--file', '/x', '--scenario', 'm3', '--rate-after-gate', '0.5'])
         .ok,
     ).toBe(false);
+  });
+
+  it('refuses `--lookahead` for anything but `queue`, and `--file2` unless it is asked for', () => {
+    // `--lookahead` and `--file2` belong to one run of one scenario, exactly `--timing` and
+    // `--broken` belong to one run of `subtitles` — an operator who typed either for anything
+    // else must be told, not silently ignored.
+    for (const scenario of ['m1', 'cast', 'headstart', 'subtitles', 'volume'] as const) {
+      expect(
+        parseArgs(['--device', 'TV', '--file', '/x', '--scenario', scenario, '--lookahead']).ok,
+        `--lookahead must be refused for ${scenario}`,
+      ).toBe(false);
+      expect(
+        parseArgs(['--device', 'TV', '--file', '/x', '--scenario', scenario, '--file2', '/y']).ok,
+        `--file2 must be refused for ${scenario}`,
+      ).toBe(false);
+    }
+    // `queue` alone (no `--lookahead`) has no second film either — `--file2` names a run that
+    // was never asked for.
+    expect(
+      parseArgs(['--device', 'TV', '--file', '/x', '--scenario', 'queue', '--file2', '/y']).ok,
+    ).toBe(false);
+    // `queue --lookahead` needs its second film, and is refused without one — the run cannot
+    // even open a device without knowing what it would race item 1 against.
+    expect(
+      parseArgs(['--device', 'TV', '--file', '/x', '--scenario', 'queue', '--lookahead']).ok,
+    ).toBe(false);
+    // And the one combination that is actually asked for.
+    const allowed = parseArgs([
+      '--device',
+      'TV',
+      '--file',
+      '/x',
+      '--scenario',
+      'queue',
+      '--lookahead',
+      '--file2',
+      '/y',
+    ]);
+    expect(allowed.ok).toBe(true);
+    expect(allowed.ok && allowed.args.lookahead).toBe(true);
+    expect(allowed.ok && allowed.args.secondFilePath).toBe('/y');
   });
 
   it('has a `headstart` scenario now that half B is built — and it can still fail', () => {

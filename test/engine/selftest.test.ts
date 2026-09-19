@@ -126,6 +126,10 @@ describe.concurrent('command line', () => {
         // refused beside `--timing`, so a verdict can never claim the refusal paths were
         // exercised by a run that took the ordinary one.
         subtitleBroken: false,
+        // Off unless `--lookahead` is passed, and `--file2` absent unless it names one:
+        // `queue`'s one built run, refused everywhere else — see `refuseLookahead`.
+        lookahead: false,
+        secondFilePath: undefined,
         dataDir: undefined,
         help: false,
       },

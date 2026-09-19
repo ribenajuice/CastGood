@@ -14,6 +14,21 @@
 #              m2                                    (M2: all eight, in order)
 #              check|remux|prepared|convert|headstart|prepfail
 #              m3                                    (M3: all six, in order)
+#              subtitles|volume|queue
+#
+# `queue --lookahead` is M5b step 2's milestone — 24g/24h, item 2 prepared while item 1
+# plays, stalls counted across the whole of item 1 from the device's own samples. It needs
+# a SECOND film, `--file2`, translated from a WSL path exactly as `--file` is: item 1
+# (`--file`) plays natively on this television, item 2 (`--file2`) needs a real conversion
+# that races item 1's own runtime.
+#
+#   scripts/win-test.sh --device "<device name>" \
+#                       --file "C:\path\to\Item one.mp4" \
+#                       --file2 "C:\path\to\Item two.mkv" \
+#                       --scenario queue --lookahead
+#
+# `queue` on its own (no `--lookahead`) is the base scenario — reorder, remove, forecast,
+# the end-of-queue screen, Stop/Resume — and it is not built yet; it exits 2 and says so.
 #
 # `headstart` has three runs and two of them assert opposite things, so the verdict names
 # which one it was. Plain: the gate must open and the film must play. `--rate 0.7`: the
@@ -119,6 +134,22 @@ while [ $# -gt 0 ]; do
           fi ;;
       esac
       passthrough+=("--file" "$file_arg"); shift 2 ;;
+    --file2)
+      # `queue --lookahead`'s second film — the same WSL-path trap as `--file` above, and
+      # the same fix.
+      [ $# -ge 2 ] || fail "--file2 needs a path"
+      file2_arg="$2"
+      case "$file2_arg" in
+        /*)
+          if command -v wslpath >/dev/null 2>&1 && converted2="$(wslpath -w "$file2_arg" 2>/dev/null)"; then
+            log "translated --file2 to the Windows path: $converted2"
+            file2_arg="$converted2"
+          else
+            fail "--file2 looks like a WSL path but could not be converted: $file2_arg
+    Pass the Windows path instead, e.g. 'C:\\Users\\You\\Desktop\\film.mp4'."
+          fi ;;
+      esac
+      passthrough+=("--file2" "$file2_arg"); shift 2 ;;
     *) passthrough+=("$1"); shift ;;
   esac
 done
