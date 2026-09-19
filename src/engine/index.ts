@@ -1897,9 +1897,24 @@ export function createEngine(options: EngineOptions = {}): Engine {
     nextQueuedSource: () => nextQueuedSource(),
     // Story 12's whole dependency on disk: the URL a reopened app has to republish.
     onSessionChanged: (info) => {
-      // Nothing to come back to: the television has been let go, whether the film ended,
-      // was stopped, or never started at all. No row is playing.
-      if (info === null && queue.playingId !== null) queue = { ...queue, playingId: null };
+      // ⚠️ **`info === null` is not "the evening ended" — it is also "about to start a new
+      // one".** `release()` fires this unconditionally, including from the front of every
+      // `session.cast()`, to clear whatever the *previous* session was before the new one
+      // takes over (see `cast()`'s own comment on why that release is queued rather than
+      // skipped). `startCast` sets `queue.playingId` synchronously **before** awaiting
+      // `session.cast()`, so a `null` here always arrived and wiped it out on literally the
+      // first cast into any queue — found on real hardware 2026-09-19, `queue.playingId`
+      // never survived a single cast. The state itself is the only thing that actually
+      // distinguishes the two: a session already idle/stopped/ended when this fires really
+      // has nothing to come back to; one that is connecting, loading or playing is mid-cast,
+      // and this must leave the row it just claimed alone.
+      const holdsTelevision =
+        session.model.state !== 'idle' &&
+        session.model.state !== 'stopped' &&
+        session.model.state !== 'ended';
+      if (info === null && !holdsTelevision && queue.playingId !== null) {
+        queue = { ...queue, playingId: null };
+      }
       void (info === null
         ? store.forgetSession()
         : store.rememberSession({ ...info, savedAtWall: clock.wallMs() }));
