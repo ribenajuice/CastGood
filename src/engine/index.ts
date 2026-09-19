@@ -1511,6 +1511,13 @@ export function createEngine(options: EngineOptions = {}): Engine {
           discardHeadStart(`the session is ${state}`);
         }
       }
+      // The film on the television is over. No row is playing any more, so 24e's
+      // protection lifts. **State-based, not `onSessionChanged(null)`-based** — that
+      // callback also fires as a routine step at the *start* of the next cast, before this
+      // one's row would otherwise ever be seen playing at all.
+      if (queue.playingId !== null && (state === 'stopped' || state === 'ended')) {
+        queue = { ...queue, playingId: null };
+      }
       push();
     },
     onDeviceInUse: (deviceId) => {
@@ -2609,6 +2616,12 @@ export function createEngine(options: EngineOptions = {}): Engine {
       return;
     }
     notice = null;
+    // **Which row is on the television** — 24e (the playing row carries no *Remove*) and
+    // 24ab (a click during playback only ever selects) both read this, and it is the only
+    // place that sets it. A film cast from the picker that is not in the queue leaves it
+    // `null`, which is a queue of one and the v1 product untouched (24b).
+    const playingItem = queue.items.find((item) => item.path === current.path);
+    queue = { ...queue, playingId: playingItem?.id ?? null };
     // **The prepared file is what goes to the television, when there is one.** The founder's
     // name for the film is still the founder's — the panel says *Cars.mkv*, because that is
     // the film they chose, and `Cars (CastGood).mp4` is our bookkeeping. Only the path
