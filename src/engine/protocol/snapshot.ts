@@ -485,6 +485,40 @@ export interface QueueItemSnapshot {
   readonly name: string;
   /** 24a: each row carries its own verdict, from the same check a single film gets. */
   readonly verdict: string | null;
+  /**
+   * 24w: what this row is told about the join before it — *"\<film\> needs about twelve
+   * minutes before it starts"* — or `null` when it will run back to back with the one above.
+   *
+   * **On the item's own row and nowhere else.** 24w fails *"if it appears anywhere but the
+   * item's own row"*, and it is recomputed from the list on every change, so a forecast can
+   * never survive a reorder or a removal unrecomputed.
+   *
+   * A forecast wait is **not a failure** (24x): no error styling, no new vocabulary. It is
+   * one sentence stating a wait the founder would otherwise meet without warning.
+   */
+  readonly forecast: string | null;
+  /**
+   * **This item is being prepared ahead right now** — 24ac, and `null` for every other row.
+   *
+   * The same bar, percentage and estimate M3 already built, in the same words: `percent` and
+   * `secondsRemaining` are the fields `PreparationSnapshot` uses and mean exactly what they
+   * mean there.
+   *
+   * ⚠️ **It must never reach the StatusRegion.** §1 allows exactly one place to answer
+   * *"what is happening right now"* and that place belongs to the film on the television.
+   * An **abandoned** job clears this to `null` in the same push, so the row falls back to
+   * its plain verdict with no ghost of the abandoned percentage and nothing said about it.
+   */
+  readonly preparing: QueueItemProgressSnapshot | null;
+}
+
+export interface QueueItemProgressSnapshot {
+  /** M3's own field, and M3's own meaning: 0–100. */
+  readonly percent: number;
+  /** M3's live estimate for the job. `null` until there is an honest one. */
+  readonly secondsRemaining: number | null;
+  /** M3's own sentence — *Converting Cars.mkv…* — so the row invents no vocabulary. */
+  readonly headline: string;
 }
 
 export interface QueueSnapshot {
@@ -555,6 +589,15 @@ export interface SessionSnapshot {
    * the renderer needs no state of its own to decide whether to draw the control.
    */
   readonly volume: VolumeSnapshot | null;
+  /**
+   * **24m: the next film's name, exactly while it is being loaded into this live session.**
+   *
+   * Non-null for the same brief window a first cast's `'loading'` state covers, but for the
+   * join between two queue items rather than the start of an evening — the television is
+   * never released in between, so `state` itself does not change to say so. `null` the rest
+   * of the time, which is always except for that one window.
+   */
+  readonly advancingTo: string | null;
 }
 
 /**
@@ -650,6 +693,7 @@ export const EMPTY_SNAPSHOT: StateSnapshot = {
     // Nothing is playing, so there is no volume to show — 23i, and the same value the
     // engine publishes for every idle and verdict state.
     volume: null,
+    advancingTo: null,
   },
   queue: { items: [], selectedId: null, playingId: null },
   subtitles: {

@@ -480,6 +480,60 @@ export const PREPARATION = {
   },
 } as const;
 
+/**
+ * Preparing the **next** item while the current one plays — M5b step 2, criteria 24f–24l.
+ *
+ * ⚠️ **Two of the milestone's four numbers are deliberately NOT here**, and their absence is
+ * the point. 24y's gate is *"criterion 10h's gate, unchanged"* — ten minutes prepared and
+ * 1.5× sustained — which already exists above as `PREPARATION.headStartSeconds` and
+ * `PREPARATION.headStartMinSpeed`. Copying them into this block would be a second copy of a
+ * promise, free to drift from the one M3b is graded on. Look-ahead reads those.
+ */
+export const LOOKAHEAD = {
+  /**
+   * How many items are prepared ahead. **One, and the selftest asserts there is never a
+   * second job** (24g).
+   *
+   * Not a tuning knob: it is the product decision from the PRD's *"How far ahead to prepare
+   * — one item, and why"*, written as a number so a test can read it rather than restate it.
+   * Raising it would need a scheduler, and 24h — zero stalls attributable to preparation —
+   * stops being provable the moment there is more than one thing to yield.
+   */
+  itemsAhead: 1,
+  /**
+   * How long the film must have played **cleanly** before a look-ahead may start, and the
+   * same clock a job that was abandoned has to serve again (24i).
+   *
+   * *"A film that is about to fail should not have a second job started behind it."* One
+   * number for both the first start and every restart, because two would be two rules.
+   *
+   * The clock runs from the first device sample that shows the picture **moving** — not from
+   * the LOAD — so a film's own start-up buffering never counts towards it.
+   */
+  cleanPlayBeforeStartMs: 60_000,
+  /**
+   * The whole budget from **the device's own first missed sample** to the look-ahead job
+   * being gone: killed, tidied up, nothing left on disk (24i).
+   *
+   * ⚠️ **Measured from the device, not from us.** The criterion says so in as many words,
+   * and the difference is real: a television reports about once a second, so the first
+   * evidence of a freeze arrives up to a sample *after* the freeze began, and a budget
+   * counted from our own decision would quietly be a second longer than the promise.
+   *
+   * **Deliberately the same number as 10i's guard reaction**, so the product has one
+   * reaction time rather than two.
+   *
+   * **Can this be met?** On the evidence, yes, and here is the arithmetic rather than a
+   * hope: aborting the job kills ffmpeg (`PREPARATION.cancelExitWaitMs`, 500 ms) and the
+   * cleanup then retries a locked file 8 times at 100 ms (`cleanupRetries`,
+   * `cleanupRetryDelayMs`) — about 1.3 s worst case, against a budget of 5 s that starts
+   * up to 1 s in the past. If it is ever missed, `lookahead.abandon_slow` says so in the
+   * log with the measured number, because a constant whose comment admits it cannot be met
+   * is a thing this project has already paid for once.
+   */
+  abandonWithinMs: 5_000,
+} as const;
+
 export const MEDIA_SERVER = {
   /** Persisted; scans upward if taken. */
   defaultPort: 8010,

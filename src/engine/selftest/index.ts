@@ -31,6 +31,7 @@ import {
 } from './m3.js';
 import { scenarioSubtitles } from './m3c.js';
 import { scenarioVolume } from './m5a.js';
+import { scenarioQueue } from './queue.js';
 import { scenarioHeadStart } from './m3b.js';
 import type { Assertion } from './kit.js';
 
@@ -93,6 +94,12 @@ export const SCENARIOS = [
   'prepfail',
   'subtitles',
   'volume',
+  // M5b step 2: named by the PRD's "What M5b adds to the selftest" table. `--lookahead` is
+  // the one run this build proves (24g/24h and 24g's own two closest exit-2 guards); the base
+  // `queue` scenario the same table also names — 24a, 24c-e, 24m-r, 24w, 24z, 24aa, 24ab — is
+  // not built yet and `scenarioQueue` says so and exits 2 rather than silently being weaker
+  // than its own name.
+  'queue',
   'm1',
   'm2',
   'm3',
@@ -249,6 +256,45 @@ export function refuseWatch(
   return null;
 }
 
+/**
+ * `--lookahead` is `queue`'s one run this build implements, and it means nothing elsewhere.
+ *
+ * Refused rather than ignored, for `refuseTiming`'s reason: `queue` on its own is a
+ * *different, unbuilt* instrument (the base scenario's 24a, 24c-e, 24m-r, 24w, 24z, 24aa,
+ * 24ab), so an operator who typed `--lookahead` for any other scenario and had it silently
+ * dropped would learn nothing from the mistake.
+ */
+export function refuseLookahead(scenario: ScenarioName, lookahead: boolean): string | null {
+  if (!lookahead) return null;
+  if (scenario === 'queue') return null;
+  return `--lookahead only applies to \`--scenario queue\`, where it is 24g/24h — item 2 prepared while item 1 plays; \`--scenario ${scenario}\` has no queue to look ahead in`;
+}
+
+/**
+ * `--file2` is `queue --lookahead`'s second film, and it means nothing elsewhere.
+ *
+ * The milestone cannot be produced with one file (see `queue.ts`'s header): item 1 has to
+ * play natively and item 2 has to need a real conversion that races item 1's runtime, so a
+ * single `--file` is never enough. Refused everywhere else, and *required* for the one
+ * combination that needs it — a run silently missing its second film would not be a queue
+ * of two at all.
+ */
+export function refuseFile2(
+  scenario: ScenarioName,
+  lookahead: boolean,
+  file2: string | undefined,
+): string | null {
+  if (scenario === 'queue' && lookahead) {
+    return file2 === undefined
+      ? '`--scenario queue --lookahead` needs a second file this television has to convert: `--file2 <path>`'
+      : null;
+  }
+  if (file2 !== undefined) {
+    return `--file2 only applies to \`--scenario queue --lookahead\`; \`--scenario ${scenario}\` has one film, passed with --file`;
+  }
+  return null;
+}
+
 export function refuseOutage(scenario: ScenarioName, outage: OutageKind): string | null {
   if (!isHumanOutage(outage)) return null;
   if (scenario === 'recover') return null;
@@ -397,6 +443,21 @@ export interface SelftestOptions {
   /** `--broken`: run `subtitles`' refusal paths instead of its ordinary run — 18j-18l. */
   readonly subtitleBroken?: boolean;
   /**
+   * `--lookahead`: run `queue`'s one built leg — 24g/24h, item 2 prepared while item 1 plays.
+   *
+   * `queue` on its own is the base scenario (24a, 24c-e, 24m-r, 24w, 24z, 24aa, 24ab), which
+   * does not exist yet — see `queue.ts`'s own abort when this is left `false`.
+   */
+  readonly lookahead?: boolean;
+  /**
+   * `--file2`: the second film `queue --lookahead` needs.
+   *
+   * Item 1 (`filePath`) has to play natively; this one has to need a real conversion that
+   * races item 1's own runtime. Required whenever `lookahead` is set on `queue`, refused
+   * everywhere else — see `refuseFile2`.
+   */
+  readonly secondFilePath?: string;
+  /**
    * `--rate`: run the conversion at this multiple of real time (`headstart` only).
    *
    * **The starved case, produced through the product.** A conversion at 0.7× cannot keep
@@ -488,6 +549,10 @@ function runVariant(options: SelftestOptions): string | null {
     if (options.subtitleBroken === true) return 'broken';
     return options.subtitleTiming === true ? 'timing' : null;
   }
+  // Named now, ahead of the base `queue` scenario existing, so the day it does the two
+  // verdicts are never mistaken for two attempts at the same run — exactly `headstart`'s own
+  // reason below.
+  if (options.scenario === 'queue') return options.lookahead === true ? 'lookahead' : null;
   if (options.scenario !== 'headstart') return null;
   if (options.conversionReadRateAfterGate !== undefined) return 'falls-behind';
   if (options.conversionReadRate !== undefined) return 'starved';
@@ -589,6 +654,8 @@ function createHarness(
 export interface Context extends Harness {
   readonly deviceName: string;
   readonly filePath: string;
+  /** `--file2`: `queue --lookahead`'s second film, or `null` for every other scenario. */
+  readonly secondFilePath: string | null;
   readonly deviceId: string;
   /** The device's address, for the second connection the `takeover` scenario opens. */
   readonly deviceAddress: string;
@@ -609,6 +676,8 @@ export interface Context extends Harness {
   readonly subtitleTiming: boolean;
   /** `--broken`: run the refusal paths instead of the ordinary run — 18j-18l. */
   readonly subtitleBroken: boolean;
+  /** `--lookahead`: `queue`'s one built run — see `queue.ts`'s header. */
+  readonly lookahead: boolean;
   /**
    * **Harness only: declare text tracks at a URL this PC does not answer on** — 18l.
    *
@@ -4038,6 +4107,7 @@ const RUNNERS: Record<AggregateMember, (context: Context) => Promise<Assertion[]
   prepfail: scenarioPrepFail,
   subtitles: scenarioSubtitles,
   volume: scenarioVolume,
+  queue: scenarioQueue,
 };
 
 /**
@@ -4151,6 +4221,13 @@ export const M3C_ORDER: readonly AggregateLeg[] = [
  * for stops being one — 21j's reasoning, applied again.
  *
  * It is runnable with `volume` alone, before M5b exists, which is what lets M5a ship first.
+ *
+ * **`queue --lookahead` is deliberately still not a leg here, now that it exists.** It is a
+ * variant run (`--lookahead`) of a scenario (`queue`) whose *own* plain run is not built yet
+ * — folding one run of an unfinished scenario into the regression aggregate would make `m5`
+ * mean "the leg that happens to exist" rather than "M5a and M5b together", which is exactly
+ * the shape of quiet shrinkage this file's other aggregates exist to prevent. It stays
+ * `volume`-only until the founder explicitly asks for `m5` to cover M5b as well.
  */
 export const M5_ORDER: readonly AggregateLeg[] = [
   { scenario: 'volume', label: 'volume', subtitleTiming: false, subtitleBroken: false },
@@ -4514,6 +4591,20 @@ export async function runSelftest(options: SelftestOptions): Promise<SelftestVer
   if (variantRefusal !== null) {
     return await publish(paths, verdict('could-not-run', 2, [], variantRefusal, null, startedMono));
   }
+  // `--lookahead` and `--file2`, the same rule a fourth and fifth time: `queue`'s one built
+  // run needs a second film, and neither flag means anything for any other scenario.
+  const lookahead = options.lookahead === true;
+  const lookaheadRefusal = refuseLookahead(options.scenario, lookahead);
+  if (lookaheadRefusal !== null) {
+    return await publish(
+      paths,
+      verdict('could-not-run', 2, [], lookaheadRefusal, null, startedMono),
+    );
+  }
+  const file2Refusal = refuseFile2(options.scenario, lookahead, options.secondFilePath);
+  if (file2Refusal !== null) {
+    return await publish(paths, verdict('could-not-run', 2, [], file2Refusal, null, startedMono));
+  }
 
   // "Could not run" checks happen before anything is started, so a missing file never
   // costs the founder a launched receiver.
@@ -4527,6 +4618,20 @@ export async function runSelftest(options: SelftestOptions): Promise<SelftestVer
       paths,
       verdict('could-not-run', 2, [], fileNotFound(options.filePath), null, startedMono),
     );
+  }
+  // Same check, second film: `refuseFile2` has already guaranteed this is set whenever it
+  // matters, so a missing second file is exactly as much "could not run" as a missing first.
+  if (options.scenario === 'queue' && lookahead) {
+    const secondFilePath = options.secondFilePath ?? '';
+    try {
+      const stat2 = await fsp.stat(secondFilePath);
+      if (!stat2.isFile()) throw new Error('not a file');
+    } catch {
+      return await publish(
+        paths,
+        verdict('could-not-run', 2, [], fileNotFound(secondFilePath), null, startedMono),
+      );
+    }
   }
 
   const overrides = options.unsafeTestOverrides;
@@ -4693,6 +4798,7 @@ export async function runSelftest(options: SelftestOptions): Promise<SelftestVer
       sleep: (ms) => harness.sleep(ms),
       deviceName: options.deviceName,
       filePath: options.filePath,
+      secondFilePath: options.secondFilePath ?? null,
       deviceId: device.id,
       deviceAddress: address ?? '',
       devicePort,
@@ -4710,6 +4816,7 @@ export async function runSelftest(options: SelftestOptions): Promise<SelftestVer
       get subtitleBroken() {
         return legBroken;
       },
+      lookahead,
       withholdTracks: (on) => {
         engine.unsafeWithholdSubtitleTracks(on);
       },

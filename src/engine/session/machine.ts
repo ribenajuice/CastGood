@@ -183,15 +183,22 @@ export type SessionEvent =
     }
   | { readonly type: 'device.load_rejected'; readonly detail: string }
   /**
-   * **We are handing a playing television the film again** — a repair (D2) or a subtitle
-   * reload (19b/20b). Raised synchronously *before* the LOAD goes on the wire, exactly as
-   * `intent.stop` moves the model before the device's reply can arrive, so the `IDLE` the
-   * receiver sends for the media session it is superseding cannot be read as the film
-   * stopping. See `LiveLoadModel`.
+   * **We are handing a playing television the film again** — a repair (D2), a subtitle
+   * reload (19b/20b), or 24m's live advance onto the next queue item. Raised synchronously
+   * *before* the LOAD goes on the wire, exactly as `intent.stop` moves the model before the
+   * device's reply can arrive, so the `IDLE` the receiver sends for the media session it is
+   * superseding cannot be read as the film stopping. See `LiveLoadModel`.
+   *
+   * `'queue-advance'` is the one variant that is never raised *because of* an `IDLE` this
+   * model is about to receive — it is raised instead of one: `session/index.ts`'s
+   * `handleStatus` sees `idleReason: 'FINISHED'` and, when a next queued item is ready,
+   * issues this LOAD in place of dispatching `device.idle` at all (24n's genuine-finish
+   * gate lives entirely in that decision, not here — this event carries no queue knowledge
+   * and would behave identically for any of the three whys).
    */
   | {
       readonly type: 'session.live_load_started';
-      readonly why: 'repair' | 'subtitle';
+      readonly why: 'repair' | 'subtitle' | 'queue-advance';
       readonly monoMs: number;
     }
   /**
@@ -363,13 +370,15 @@ export interface RecoveryModel {
  */
 export interface LiveLoadModel {
   /**
-   * Why the film is being handed over again. Logged, never branched on — the two are
-   * treated identically, and a third would be too.
+   * Why the film is being handed over again. Logged, never branched on — all three are
+   * treated identically, and a fourth would be too.
    *
    * `repair` — defect D2: the television's byte connection died and it never came back.
    * `subtitle` — a track chosen mid-film, or an offset past the ladder (19b/20b).
+   * `queue-advance` — 24m/24n: the film genuinely finished and the next queue item is
+   * ready, so it is loaded into this same session rather than releasing the television.
    */
-  readonly why: 'repair' | 'subtitle';
+  readonly why: 'repair' | 'subtitle' | 'queue-advance';
   readonly sinceMono: number;
 }
 
@@ -524,7 +533,16 @@ export const INITIAL_SESSION: SessionModel = {
   error: null,
 };
 
-const ACTIVE_STATES: readonly SessionState[] = ['buffering', 'playing', 'paused', 'seeking'];
+/**
+ * States in which a television is actually holding a session for us.
+ *
+ * Exported for `session/index.ts`'s `handleStatus`: before it will even ask
+ * `deps.nextQueuedSource` for 24m's live advance, it checks the session is in one of these —
+ * the same test this reducer's own `device.idle` case makes via `!ACTIVE_STATES.includes` —
+ * so a `FINISHED` arriving after the founder has already pressed Stop cannot be read as an
+ * opportunity to advance a queue that has already ended.
+ */
+export const ACTIVE_STATES: readonly SessionState[] = ['buffering', 'playing', 'paused', 'seeking'];
 
 /**
  * States in which a position change makes sense at all.
@@ -1220,6 +1238,16 @@ export function reduce(model: SessionModel, event: SessionEvent): SessionTransit
     }
 
     case 'device.idle': {
+      // **24m/24n's whole mechanism is that this case is sometimes never reached.** When a
+      // film genuinely finishes and a next queue item is ready, `session/index.ts`'s
+      // `handleStatus` intercepts the status *before* it becomes this event — it issues a
+      // live LOAD (`session.live_load_started`, why `'queue-advance'`) instead of dispatching
+      // `device.idle` at all, so the `send.stop`/`release` effects below never fire and the
+      // television is never released. This reducer stays pure and unaware of the queue: it
+      // still ends the session exactly as written whenever it *is* called with `FINISHED`,
+      // which is every ordinary finish and every finish this milestone did not have a ready
+      // next item for (24y's partial-head-start case is one of those — deliberately left as
+      // today's plain wait, see `nextQueuedSource` in `src/engine/index.ts`).
       const finished = event.idleReason === 'FINISHED';
 
       if (model.state === 'loading') {

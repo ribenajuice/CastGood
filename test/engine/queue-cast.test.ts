@@ -10,14 +10,18 @@ import { resolveAppPaths } from '../../src/engine/paths.js';
 import { startFakeReceiver } from './fake-receiver/index.js';
 
 /**
- * **24e/24ab: casting the first item of a queue has to actually mark it as playing.**
+ * **24e/24ab/24g's whole foundation: casting the first item of a queue has to actually mark
+ * it as playing.** Found on real hardware 2026-09-19, the founder's own first `queue
+ * --lookahead` run: `queue.playingId` never survived the *connecting* phase of an ordinary
+ * cast, so look-ahead had no "next item" to reach for and the run aborted before it could
+ * measure anything.
  *
- * Until now, nothing dispatched `queue.add` and `cast.start` against a real engine
- * together, so nothing caught that `queue.playingId` was never being set at all —
- * `startCast` had no matching logic for it. The renderer's own `canRemove: item.id !==
- * playingId` (`view-model.ts`) was therefore always `true` for every row, including the one
- * actually on the television: 24e's *"the playing item carries no Remove"* has never been
- * enforced.
+ * The cause was `onSessionChanged(null)`, which fires from `release()` — including from the
+ * front of every `session.cast()`, to clear whatever the *previous* session was. `startCast`
+ * sets `queue.playingId` synchronously before awaiting `session.cast()`, so that `null`
+ * always arrived a moment later and wiped it straight back out, on literally the first cast
+ * into any queue. No existing test dispatched `queue.add` and `cast.start` against a real
+ * engine together, which is exactly why nothing caught it before hardware did.
  */
 
 function createFakeMdns(service: MdnsService): Mdns {
@@ -32,8 +36,8 @@ function createFakeMdns(service: MdnsService): Mdns {
   };
 }
 
-describe('casting the first item of a queue (24e, 24ab)', () => {
-  it('sets queue.playingId to the row that was cast', async () => {
+describe('casting the first item of a queue (24e, 24ab, 24g)', () => {
+  it('sets queue.playingId, and it survives past the connecting phase', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'castgood-queue-cast-'));
     const item1Dir = path.join(directory, 'Cars (2006)');
     await fs.mkdir(item1Dir, { recursive: true });
@@ -81,9 +85,12 @@ describe('casting the first item of a queue (24e, 24ab)', () => {
         tries += 1;
       }
       expect(engine.snapshot().session.state).toBe('playing');
+
+      // The regression: this used to be `null` again by the time `playing` was reached,
+      // even though `startCast` had matched the row correctly a moment earlier.
       expect(engine.snapshot().queue.playingId).toBe(firstItemId);
 
-      // Give any further, delayed onSessionChanged a chance to fire and confirm it holds.
+      // Give any further, delayed `onSessionChanged` a chance to fire and confirm it holds.
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(engine.snapshot().queue.playingId).toBe(firstItemId);
     } finally {
@@ -93,7 +100,7 @@ describe('casting the first item of a queue (24e, 24ab)', () => {
     }
   }, 15_000);
 
-  it('clears playingId once the session genuinely ends', async () => {
+  it('still clears playingId once the session genuinely ends', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'castgood-queue-cast-'));
     const item1Path = path.join(directory, 'one.mp4');
     await fs.writeFile(item1Path, Buffer.alloc(1024, 1));

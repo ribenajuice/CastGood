@@ -45,6 +45,8 @@ export const INITIAL_SNAPSHOT: StateSnapshot = {
     subtitleLabel: null,
     // 23i: nothing is playing before the first snapshot arrives, so there is no control.
     volume: null,
+    // 24m: nothing is ever mid-join before the first snapshot arrives either.
+    advancingTo: null,
   },
   // M3c: the subtitle control, **Off** on every film until the founder says otherwise (19a).
   queue: { items: [], selectedId: null, playingId: null },
