@@ -9,7 +9,13 @@ function withQueue(names: readonly string[], over: Partial<StateSnapshot['queue'
   const snapshot: StateSnapshot = {
     ...EMPTY_SNAPSHOT,
     queue: {
-      items: names.map((name) => ({ id: `q:${name}`, name, verdict: null })),
+      items: names.map((name) => ({
+        id: `q:${name}`,
+        name,
+        verdict: null,
+        forecast: null,
+        preparing: null,
+      })),
       selectedId: null,
       playingId: null,
       ...over,

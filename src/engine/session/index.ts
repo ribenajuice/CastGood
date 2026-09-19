@@ -160,6 +160,23 @@ export interface LiveSubtitleInfo {
 }
 
 /** What a previous run left behind, handed back to `reattach()`. */
+/**
+ * One `MEDIA_STATUS` from the television, untouched.
+ *
+ * Deliberately three fields and no more: what the device said it was doing, where it said
+ * the film was, and when that arrived on our clock. Anything derived belongs to whoever
+ * derives it.
+ */
+export interface DeviceSample {
+  /** Monotonic milliseconds, stamped when the status came off the socket. */
+  readonly monoMs: number;
+  /** The device's own `playerState`: PLAYING, BUFFERING, PAUSED, IDLE. */
+  readonly playerState: string | null;
+  /** The device's own `currentTime`. `null` when the status carried none. */
+  readonly positionSec: number | null;
+  readonly idleReason: string | null;
+}
+
 export interface ReattachTarget {
   readonly token: string;
   readonly mediaSessionId: number | null;
@@ -219,6 +236,21 @@ export interface SessionSupervisorDeps {
    * exactly this reason), and it is an architect's call, not a comment's.
    */
   onLoadRejected?(detail: string): void;
+  /**
+   * **A device status, as it arrived** — the same instant `position.sample` is logged.
+   *
+   * M5b's look-ahead is graded on *"the 5 s is measured from the device's first missed
+   * sample rather than from our own decision"* (24i), and there was no way to know a
+   * device's samples from outside this file: the model carries a position that has already
+   * been extrapolated, snapped and reconciled, which is precisely our opinion of the device
+   * rather than the device. So this is the raw report — the `playerState` the receiver sent
+   * and the `currentTime` it sent with it — and nothing else in the engine may be used to
+   * date a hesitation.
+   *
+   * Fires for every status including the final `IDLE`, so a run's last word is not missing
+   * from whatever is counting.
+   */
+  onDeviceSample?(sample: DeviceSample): void;
   /**
    * Overridden only by tests, so the retry *arithmetic* around a 14-second exchange is
    * checked in a second rather than in three quarters of a minute.
@@ -1143,6 +1175,12 @@ export function createSessionSupervisor(deps: SessionSupervisorDeps): SessionSup
         durationSec: status.durationSec,
         monoMs: Math.round(status.receivedAtMono),
       });
+      deps.onDeviceSample?.({
+        monoMs: status.receivedAtMono,
+        playerState: status.playerState,
+        positionSec: reported,
+        idleReason: status.idleReason,
+      });
       dispatch({
         type: 'device.idle',
         idleReason: status.idleReason,
@@ -1179,6 +1217,16 @@ export function createSessionSupervisor(deps: SessionSupervisorDeps): SessionSup
       seekTargetSec: tracker.seekTargetSec,
       durationSec: status.durationSec,
       monoMs: Math.round(status.receivedAtMono),
+    });
+
+    // **Before the early return below.** A status carrying no position is still a report
+    // from the device, and a rule that only ever heard the ones with numbers on them would
+    // be deaf for exactly as long as a television was in trouble.
+    deps.onDeviceSample?.({
+      monoMs: status.receivedAtMono,
+      playerState: status.playerState,
+      positionSec: reportedSec,
+      idleReason: status.idleReason,
     });
 
     const position = tracker.position;

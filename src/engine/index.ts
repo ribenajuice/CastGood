@@ -7,10 +7,19 @@ import {
   addFiles,
   EMPTY_QUEUE,
   moveItem,
+  nextAfterPlaying,
   removeItem,
   selectItem,
   type Queue,
+  type QueueItem,
 } from './queue/model.js';
+import { forecastQueue, type ItemForecast } from './queue/forecast.js';
+import {
+  createLookaheadRunner,
+  type LookaheadRunner,
+  type LookaheadTarget,
+} from './queue/lookahead-runner.js';
+import type { PlaybackObservation } from './queue/lookahead.js';
 import { resolveAppPaths, type AppPaths } from './paths.js';
 import { EMPTY_SNAPSHOT, type Intent, type StateSnapshot } from './protocol/index.js';
 import type {
@@ -28,6 +37,7 @@ import { createMediaServer, type MediaServer } from './media-server/index.js';
 import { createCastClient, type CastClient, type TransportFactory } from './cast/index.js';
 import {
   createSessionSupervisor,
+  type DeviceSample,
   type SessionSubtitle,
   type SessionSupervisor,
 } from './session/index.js';
@@ -329,6 +339,25 @@ export function createEngine(options: EngineOptions = {}): Engine {
    * a reopened app reattaches to the film and treats it as a queue of one.
    */
   let queue: Queue = EMPTY_QUEUE;
+  /**
+   * What story 7's check made of each queued item, keyed by **device and path**.
+   *
+   * The device is in the key because 7b already says so — *"changing the device re-runs
+   * every item's check"* — and a cache keyed on the path alone would answer a question
+   * about the Ultra with an answer about the bedroom Chromecast. It is a cache and it is
+   * allowed to be empty: nothing here is remembered across a run and nothing reaches disk
+   * (24r).
+   */
+  const queueChecks = new Map<string, QueueItemCheck>();
+  /** True while a pass over the queue's checks is running, so two never overlap. */
+  let queueCheckRunning = false;
+  /**
+   * **The last thing the television actually said** — 24i's clock, and nothing else's.
+   *
+   * The session's model carries a position that has been extrapolated and reconciled, which
+   * is our opinion; this is the device's own report, straight off the socket.
+   */
+  let lastDeviceSample: DeviceSample | null = null;
   /**
    * The file being checked right now, which is **not** the selection until the check
    * finishes. See `CheckSnapshot`: everything downstream reads `file`, and a half-inspected
@@ -1261,6 +1290,229 @@ export function createEngine(options: EngineOptions = {}): Engine {
     push();
   }
 
+  // --- The queue's own checks, and the one look-ahead job ---------------------
+  //
+  // M5b step 2. Everything below is the engine half of *"the next film starts with no
+  // wait"*: what each queued item needs (story 7's check, per row), what that means for the
+  // joins in the evening (24w's forecast), and the single job that prepares the next item
+  // while the current one plays (24f–24l).
+
+  /** What story 7's check made of one queued item, for this television. */
+  interface QueueItemCheck {
+    readonly name: string;
+    readonly inspection: SourceInspection;
+    readonly verdict: Verdict | null;
+    /** A prepared sibling already on disk (9a). Nothing is prepared ahead for one of these. */
+    readonly prepared: PreparedArtifact | null;
+  }
+
+  /** 7b: a verdict belongs to a **file and a television**, never to a file alone. */
+  function queueCheckKey(path: string): string {
+    return `${selectedDeviceId ?? 'no-device'}\n${path}`;
+  }
+
+  /**
+   * The check for one row.
+   *
+   * The row the founder has selected is **not** re-probed: it is `file`, it has already been
+   * through `runCheckAsync`, and a second reader for the same file is exactly what the
+   * 2026-08-20 source-of-truth ADR forbids.
+   */
+  function queueCheckFor(item: QueueItem): QueueItemCheck | null {
+    if (file !== null && file.path === item.path) {
+      return { name: file.name, inspection: file, verdict, prepared };
+    }
+    return queueChecks.get(queueCheckKey(item.path)) ?? null;
+  }
+
+  /**
+   * Check every queued row that has not been checked for this television yet — 24a.
+   *
+   * One at a time and in order, because each one is an ffprobe child process and twenty-four
+   * of them at once is a season's worth of processes for a list nobody has scrolled to yet.
+   * Every answer is the same check a single film gets, which is 24a's whole requirement: the
+   * verdict on a row is not a second opinion about the file.
+   */
+  function runQueueChecks(trigger: string): void {
+    void runQueueChecksAsync(trigger);
+  }
+
+  async function runQueueChecksAsync(trigger: string): Promise<void> {
+    if (queueCheckRunning) return;
+    const device = devices.find((candidate) => candidate.id === selectedDeviceId);
+    if (device === undefined) return;
+    queueCheckRunning = true;
+    try {
+      for (;;) {
+        const item = queue.items.find((candidate) => queueCheckFor(candidate) === null);
+        if (item === undefined) return;
+        const key = queueCheckKey(item.path);
+        const startedAtMono = clock.monoMs();
+        const inspection = await inspectSource(item.path, ffprobeRunner());
+        const profile = profileFor(device);
+        let decided: Verdict | null = null;
+        let sibling: PreparedArtifact | null = null;
+        if (inspection.probe !== null) {
+          decided = classify(inspection.probe, profile, { throughput: throughputNow() });
+          const pipeline = decided.plan.kind === 'none' ? null : preparationPipeline();
+          if (pipeline !== null) {
+            sibling = await pipeline.findPrepared(item.path, inspection.probe, profile);
+            if (sibling !== null) {
+              // 9a: the answer is re-derived from the artifact's own probe, exactly as the
+              // selected file's check does it, so the row describes the file that would
+              // actually be cast.
+              decided = classify(sibling.probe, profile, {
+                alreadyPrepared: true,
+                throughput: throughputNow(),
+              });
+            }
+          }
+        }
+        // The device may have changed under us while ffprobe ran. The key was computed
+        // before the await, so an answer for the old television is filed under the old
+        // television and is never read for the new one.
+        queueChecks.set(key, { name: item.name, inspection, verdict: decided, prepared: sibling });
+        const elapsedMs = clock.monoMs() - startedAtMono;
+        logger.info('queue.item_checked', {
+          trigger,
+          name: item.name,
+          deviceId: device.id,
+          kind: decided?.kind ?? null,
+          estimateSeconds: decided?.estimateSeconds ?? null,
+          preparedPath: sibling?.path ?? null,
+          elapsedMs,
+        });
+        if (elapsedMs > PREPARATION.checkBudgetMs) {
+          logger.warn('queue.item_check_slow', { elapsedMs, budgetMs: PREPARATION.checkBudgetMs });
+        }
+        push();
+        observeLookahead();
+      }
+    } catch (error) {
+      logger.warn('queue.check_failed', { error, trigger });
+    } finally {
+      queueCheckRunning = false;
+    }
+  }
+
+  /** 7b: a new television is a new answer for every row. Nothing stale survives the change. */
+  function forgetQueueChecks(why: string): void {
+    if (queueChecks.size === 0) return;
+    logger.info('queue.checks_cleared', { why, items: queueChecks.size });
+    queueChecks.clear();
+  }
+
+  /** 24w, per row, recomputed from the list every time anything about the list changes. */
+  function queueForecasts(): readonly ItemForecast[] {
+    return forecastQueue(
+      queue.items.map((item) => {
+        const check = queueCheckFor(item);
+        return {
+          id: item.id,
+          name: item.name,
+          estimateSeconds:
+            check?.prepared != null || check?.verdict == null
+              ? null
+              : check.verdict.plan.kind === 'none'
+                ? null
+                : check.verdict.estimateSeconds,
+          durationSec: check?.inspection.durationSec ?? null,
+        };
+      }),
+    );
+  }
+
+  /**
+   * The item look-ahead may prepare, or `null` — 24g's *"one item ahead and no more"*.
+   *
+   * **The next item after the one playing, and nothing else.** Not the selection, not the
+   * first unprepared row: a queue does not turn CastGood into a background converter.
+   */
+  function lookaheadTarget(): LookaheadTarget | null {
+    const device = devices.find((candidate) => candidate.id === selectedDeviceId);
+    if (device === undefined) return null;
+    const next = nextAfterPlaying(queue);
+    if (next === null) return null;
+    const check = queueCheckFor(next);
+    if (check === null || check.verdict === null || check.inspection.probe === null) return null;
+    // Already prepared (9a), or nothing to prepare: there is no work, and 24f's *"a finished
+    // preparation is never re-run because the item moved"* is this line.
+    if (check.prepared !== null || check.verdict.plan.kind === 'none') return null;
+    if (check.verdict.kind === 'impossible') return null;
+    return {
+      itemId: next.id,
+      request: {
+        source: { ...check.inspection, name: check.name },
+        sourceProbe: check.inspection.probe,
+        verdict: check.verdict,
+        deviceProfile: profileFor(device),
+      },
+    };
+  }
+
+  /**
+   * Show the look-ahead the film on screen — **the only way anything about it changes**.
+   *
+   * Called on every device status, every session change and every change to the queue. The
+   * device's own report is passed through untouched, because 24i is measured from the
+   * device's first missed sample and our extrapolated position is not that.
+   */
+  function observeLookahead(): void {
+    const model = session.model;
+    const observation: PlaybackObservation = {
+      monoMs: clock.monoMs(),
+      state: model.state,
+      flags: model.flags,
+      // 10i is holding the picture. A held film is a hesitating film, and 24i names the
+      // guard explicitly among the four hesitations.
+      heldByGuard: headStart !== null && headStart.holdingMessage !== null,
+      // 24k(a): *"completes" means the job has exited, finishing remux included*. This is
+      // exactly what `preparation` is — `runHeadStart` clears it after the remux, the
+      // rename and the publish, not when the encoder exits.
+      currentConversionOpen: preparation !== null,
+      commanded: model.pending !== null || model.seek !== null,
+      report:
+        lastDeviceSample === null
+          ? null
+          : {
+              monoMs: lastDeviceSample.monoMs,
+              playerState: lastDeviceSample.playerState,
+              positionSec: lastDeviceSample.positionSec,
+            },
+    };
+    lookahead.observe(observation, lookaheadTarget());
+  }
+
+  const lookahead: LookaheadRunner = createLookaheadRunner({
+    logger,
+    clock,
+    pipeline: preparationPipeline,
+    onChanged: () => {
+      push();
+    },
+    onPrepared: (itemId, artifact) => {
+      // The milestone, in one line: the item now has a real file beside its source, so its
+      // row says *ready* and it will start with no wait when it comes up.
+      const item = queue.items.find((candidate) => candidate.id === itemId);
+      if (item === undefined) return;
+      const check = queueChecks.get(queueCheckKey(item.path));
+      if (check === undefined) return;
+      const device = devices.find((candidate) => candidate.id === selectedDeviceId);
+      queueChecks.set(queueCheckKey(item.path), {
+        ...check,
+        prepared: artifact,
+        verdict:
+          device === undefined
+            ? check.verdict
+            : classify(artifact.probe, profileFor(device), {
+                alreadyPrepared: true,
+                throughput: throughputNow(),
+              }),
+      });
+      push();
+    },
+  });
+
   /**
    * The friendly name of a device id, remembered across it leaving the device list.
    *
@@ -1282,6 +1534,10 @@ export function createEngine(options: EngineOptions = {}): Engine {
 
   function push(): void {
     const model = session.model;
+    // 24w: recomputed from the list on every push, never remembered. That is the whole of
+    // *"a forecast never survives a reorder or a removal unrecomputed"* — there is nowhere
+    // for a stale one to survive.
+    const forecasts = queueForecasts();
     const sessionNotice: NoticeSnapshot | null =
       model.error === null
         ? notice
@@ -1397,14 +1653,34 @@ export function createEngine(options: EngineOptions = {}): Engine {
         volume: volumeSnapshot(),
       },
       queue: {
-        items: queue.items.map((item) => ({
-          id: item.id,
-          name: item.name,
-          // 24a: a row's verdict is the same check a single film gets. Step 2 runs that per
-          // row; until then, the one film that has been checked is the one that carries it.
-          verdict:
-            file !== null && file.path === item.path ? (verdictSnapshot()?.headline ?? null) : null,
-        })),
+        items: queue.items.map((item) => {
+          // 24a: a row's verdict is **the same check a single film gets**, run per row and
+          // re-run whenever the television changes.
+          const check = queueCheckFor(item);
+          const forecast = forecasts.find((entry) => entry.id === item.id) ?? null;
+          const job = lookahead.job;
+          return {
+            id: item.id,
+            name: item.name,
+            verdict:
+              file !== null && file.path === item.path
+                ? (verdictSnapshot()?.headline ?? null)
+                : (check?.verdict?.headline ?? null),
+            // 24w, and only ever on this row.
+            forecast: forecast?.message ?? null,
+            // 24ac: the live bar belongs to the row being prepared ahead and to nothing
+            // else on screen. `lookahead.job` is `null` the instant a job is abandoned, so
+            // an abandoned row falls straight back to its plain verdict above.
+            preparing:
+              job === null || job.itemId !== item.id || check?.verdict == null
+                ? null
+                : {
+                    percent: job.percent,
+                    secondsRemaining: job.secondsRemaining,
+                    headline: preparationHeadline(check.verdict.kind, item.name),
+                  },
+          };
+        }),
         selectedId: queue.selectedId,
         playingId: queue.playingId,
       },
@@ -1436,6 +1712,8 @@ export function createEngine(options: EngineOptions = {}): Engine {
           selectedDeviceId = device.id;
           if (takesOver) logger.info('device.remembered_selected', { deviceId: device.id });
           runCheck('device.found');
+          forgetQueueChecks('the television changed');
+          runQueueChecks('device.found');
         }
         push();
       },
@@ -1448,6 +1726,8 @@ export function createEngine(options: EngineOptions = {}): Engine {
         if (selectedDeviceId === deviceId) {
           selectedDeviceId = devices[0]?.id ?? null;
           runCheck('device.lost');
+          forgetQueueChecks('the television went away');
+          runQueueChecks('device.lost');
         }
         push();
       },
@@ -1511,14 +1791,24 @@ export function createEngine(options: EngineOptions = {}): Engine {
           discardHeadStart(`the session is ${state}`);
         }
       }
-      // The film on the television is over. No row is playing any more, so 24e's
-      // protection lifts. **State-based, not `onSessionChanged(null)`-based** — that
-      // callback also fires as a routine step at the *start* of the next cast, before this
-      // one's row would otherwise ever be seen playing at all.
+      // The film on the television is over. The queue stays exactly as it is — 24o and 24q
+      // both insist on that — but no row is playing any more, so 24e's protection lifts and
+      // look-ahead has nothing to run behind. **State-based, not `onSessionChanged(null)`-
+      // based** — that callback also fires as a routine step at the *start* of the next
+      // cast, before this one's row would otherwise ever be seen playing at all.
       if (queue.playingId !== null && (state === 'stopped' || state === 'ended')) {
         queue = { ...queue, playingId: null };
       }
       push();
+      // 24k: a film that has stopped, ended or gone to pieces takes the look-ahead with it.
+      // Read from the model on every change rather than from an event, for the same reason
+      // the segments above are: *"the session is over"* stays in one place.
+      observeLookahead();
+    },
+    // 24i's clock. **The device's own report**, forwarded untouched — see `DeviceSample`.
+    onDeviceSample: (sample) => {
+      lastDeviceSample = sample;
+      observeLookahead();
     },
     onDeviceInUse: (deviceId) => {
       // The device being cast to is never dropped from the list, however quiet mDNS goes.
@@ -1533,6 +1823,9 @@ export function createEngine(options: EngineOptions = {}): Engine {
     },
     // Story 12's whole dependency on disk: the URL a reopened app has to republish.
     onSessionChanged: (info) => {
+      // Nothing to come back to: the television has been let go, whether the film ended,
+      // was stopped, or never started at all. No row is playing.
+      if (info === null && queue.playingId !== null) queue = { ...queue, playingId: null };
       void (info === null
         ? store.forgetSession()
         : store.rememberSession({ ...info, savedAtWall: clock.wallMs() }));
@@ -2616,10 +2909,12 @@ export function createEngine(options: EngineOptions = {}): Engine {
       return;
     }
     notice = null;
-    // **Which row is on the television** — 24e (the playing row carries no *Remove*) and
-    // 24ab (a click during playback only ever selects) both read this, and it is the only
-    // place that sets it. A film cast from the picker that is not in the queue leaves it
-    // `null`, which is a queue of one and the v1 product untouched (24b).
+    // **Which row is on the television** — M5b, and nothing else sets it.
+    //
+    // Two criteria read it and they are the whole of why it exists: 24e (the playing row
+    // carries no *Remove*) and 24g (look-ahead prepares the row **after** this one). A film
+    // cast from the picker that is not in the queue leaves it `null`, which is a queue of
+    // one and the v1 product untouched (24b).
     const playingItem = queue.items.find((item) => item.path === current.path);
     queue = { ...queue, playingId: playingItem?.id ?? null };
     // **The prepared file is what goes to the television, when there is one.** The founder's
@@ -2823,6 +3118,9 @@ export function createEngine(options: EngineOptions = {}): Engine {
       // — and by the time we are here the answer was yes, so the job stops and its partial
       // work goes with it.
       cancelPreparation('engine stopping');
+      // The same promise for the job nobody is watching. A look-ahead is still an ffmpeg
+      // process on the founder's PC, and P6 does not care which film it was for.
+      const lookaheadStopped = lookahead.dispose();
       // An extraction in flight is killed for the same reason a probe is. Nothing it would
       // have produced outlives the run: since 2026-08-27 a finished track is cues in memory
       // and there is no file to take away with it (20g).
@@ -2831,6 +3129,7 @@ export function createEngine(options: EngineOptions = {}): Engine {
       // of segments — runs after the kill, and a stop that returned before it was done would
       // leave the founder's disk being tidied by a process they think has gone.
       await preparationTask;
+      await lookaheadStopped;
       await subtitleTask;
       await segmentCleanup;
       logger.info('engine.stop', {});
@@ -2867,8 +3166,12 @@ export function createEngine(options: EngineOptions = {}): Engine {
           // become "the one you used last".
           void store.rememberDevice(device.id, device.friendlyName, device.model);
           // 7b: the verdict is about a file **and** a television, so a different television
-          // is a different question and may well be a different answer.
+          // is a different question and may well be a different answer. 24a says the same
+          // of every row: *"changing the device re-runs every item's check"*, and 24a fails
+          // *"if a device change leaves a stale verdict on any row"*.
           runCheck('device.select');
+          forgetQueueChecks('the founder chose another television');
+          runQueueChecks('device.select');
           push();
           return;
         }
@@ -2989,16 +3292,28 @@ export function createEngine(options: EngineOptions = {}): Engine {
             (p) => `q:${p}`,
           );
           push();
+          // 24a: each new row gets its own verdict, from the same check a single film gets.
+          // 24w's forecast falls out of those verdicts and is recomputed on every push.
+          runQueueChecks('queue.add');
+          observeLookahead();
           return;
         }
         case 'queue.move':
           // 24c: nothing reaches the television. There is nothing here that could.
           queue = moveItem(queue, intent.id, intent.toIndex);
           push();
+          // 24f: the item being prepared ahead may no longer be next. An in-flight job for a
+          // row that has moved is abandoned and its partial work removed; a *finished*
+          // preparation is a file on disk and survives any reorder untouched.
+          observeLookahead();
           return;
         case 'queue.remove':
           queue = removeItem(queue, intent.id);
           push();
+          // 24d: removing the row being prepared ahead abandons that job within 5 s and
+          // removes its partial work exactly as Cancel does. Nothing on disk that was
+          // already finished is touched.
+          observeLookahead();
           return;
         case 'queue.select':
           // 24ab: selects, and that is all.

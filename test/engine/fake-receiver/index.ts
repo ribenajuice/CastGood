@@ -394,6 +394,22 @@ export interface FakeReceiver {
   announceReceiverStatus(): void;
   setPositionSec(seconds: number): void;
   /**
+   * **The picture stops while the television goes on insisting it is playing** — M5b, 24i.
+   *
+   * The meanest hesitation a real set produces, and the one every kinder fake would hide.
+   * `playerState` stays `PLAYING`, statuses keep arriving on the same cadence, and only the
+   * one number that matters — `currentTime` — stops moving. A fake that answered a frozen
+   * picture with `BUFFERING` would announce the trouble a sender could otherwise only
+   * *measure*, and 24i is graded on the measurement: *"the device's position failing to
+   * advance"*, dated from the device's own first missed sample.
+   *
+   * This is what the founder's own hardware does when a wifi blip starves the decoder — the
+   * 2026-08-21 starved run reported PLAYING through 46 seconds of frozen picture in 343.
+   */
+  freezePicture(frozen: boolean): void;
+  /** True while the picture is frozen. The test's way of proving it did the freezing. */
+  readonly pictureFrozen: boolean;
+  /**
    * Where the film is on the device right now.
    *
    * A read-only companion to `setPositionSec`, and the only way a test can say "the
@@ -837,8 +853,12 @@ export async function startFakeReceiver(options: FakeReceiverOptions = {}): Prom
   const senderOf = new Map<net.Socket, string>();
   let current: net.Socket | null = null;
 
+  /** 24i's hesitation: PLAYING, reporting, and not moving. See `freezePicture`. */
+  let pictureFrozen = false;
+
   function currentPositionSec(): number {
-    const advanced = playerState === 'PLAYING' ? (monoNowMs() - positionAtMs) / 1000 : 0;
+    const advanced =
+      playerState === 'PLAYING' && !pictureFrozen ? (monoNowMs() - positionAtMs) / 1000 : 0;
     return Math.min(durationSec, positionSec + advanced);
   }
 
@@ -1479,6 +1499,17 @@ export async function startFakeReceiver(options: FakeReceiverOptions = {}): Prom
     setPositionSec: (seconds) => {
       positionSec = seconds;
       positionAtMs = monoNowMs();
+    },
+    freezePicture: (frozen) => {
+      // Bank where the film had got to before stopping the clock, so a thaw carries on from
+      // where the picture stopped rather than jumping forward by the length of the freeze —
+      // which is what a starved decoder really does.
+      positionSec = currentPositionSec();
+      positionAtMs = monoNowMs();
+      pictureFrozen = frozen;
+    },
+    get pictureFrozen() {
+      return pictureFrozen;
     },
     get positionSec() {
       return currentPositionSec();
