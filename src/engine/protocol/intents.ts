@@ -125,6 +125,21 @@ export const intentSchema = z.discriminatedUnion('type', [
    * `test/architecture/no-telemetry.test.ts` is what stops one being added.
    */
   z.object({ type: z.literal('diagnostics.export') }),
+  /**
+   * The queue — M5b step 1. **None of these reaches a television.**
+   *
+   * 24c and 24ab both promise that reordering and clicking send nothing on the wire. The
+   * queue model has no way to send (its only import is its own sort function), and these
+   * intents carry nothing a session could act on: an id and, for a move, a destination.
+   */
+  z.object({ type: z.literal('queue.add'), paths: z.array(filePath).min(1) }),
+  z.object({
+    type: z.literal('queue.move'),
+    id: z.string().min(1),
+    toIndex: z.number().int().min(0),
+  }),
+  z.object({ type: z.literal('queue.remove'), id: z.string().min(1) }),
+  z.object({ type: z.literal('queue.select'), id: z.string().min(1) }),
 ]);
 
 export type Intent = z.infer<typeof intentSchema>;

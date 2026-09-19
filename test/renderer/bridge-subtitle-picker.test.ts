@@ -38,7 +38,11 @@ describe('pickSubtitleFile', () => {
     const clickEvent = { nativeEvent: {}, target: {}, preventDefault: () => undefined };
     const outcome = await pickSubtitleFile(clickEvent);
 
-    expect(outcome).toEqual({ kind: 'selected', path: 'D:\\Films\\Cars.en.srt' });
+    expect(outcome).toEqual({
+      kind: 'selected',
+      path: 'D:\\Films\\Cars.en.srt',
+      paths: ['D:\\Films\\Cars.en.srt'],
+    });
     expect(pick).toHaveBeenCalledWith(undefined);
   });
 

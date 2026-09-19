@@ -47,6 +47,7 @@ export const INITIAL_SNAPSHOT: StateSnapshot = {
     volume: null,
   },
   // M3c: the subtitle control, **Off** on every film until the founder says otherwise (19a).
+  queue: { items: [], selectedId: null, playingId: null },
   subtitles: {
     options: [],
     unavailable: [],

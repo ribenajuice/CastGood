@@ -3,6 +3,14 @@ import { basename, dirname, join } from 'node:path';
 import { createFileSink, createLogger, systemClock } from './logging/index.js';
 import type { Clock, Logger, LogLevel, LogSink } from './logging/index.js';
 import { exportDiagnostics } from './diagnostics/export.js';
+import {
+  addFiles,
+  EMPTY_QUEUE,
+  moveItem,
+  removeItem,
+  selectItem,
+  type Queue,
+} from './queue/model.js';
 import { resolveAppPaths, type AppPaths } from './paths.js';
 import { EMPTY_SNAPSHOT, type Intent, type StateSnapshot } from './protocol/index.js';
 import type {
@@ -316,6 +324,11 @@ export function createEngine(options: EngineOptions = {}): Engine {
   let devices: readonly Device[] = [];
   let selectedDeviceId: DeviceId | null = null;
   let file: SourceInspection | null = null;
+  /**
+   * The queue — M5b. **In memory only (24r).** Nothing writes it, nothing reads it back, and
+   * a reopened app reattaches to the film and treats it as a queue of one.
+   */
+  let queue: Queue = EMPTY_QUEUE;
   /**
    * The file being checked right now, which is **not** the selection until the check
    * finishes. See `CheckSnapshot`: everything downstream reads `file`, and a half-inspected
@@ -1382,6 +1395,18 @@ export function createEngine(options: EngineOptions = {}): Engine {
         // CastGood never puts its hand on a television it is not using. Everything inside
         // came off a receiver status; nothing here is computed (23b).
         volume: volumeSnapshot(),
+      },
+      queue: {
+        items: queue.items.map((item) => ({
+          id: item.id,
+          name: item.name,
+          // 24a: a row's verdict is the same check a single film gets. Step 2 runs that per
+          // row; until then, the one film that has been checked is the one that carries it.
+          verdict:
+            file !== null && file.path === item.path ? (verdictSnapshot()?.headline ?? null) : null,
+        })),
+        selectedId: queue.selectedId,
+        playingId: queue.playingId,
       },
       subtitles: subtitlesSnapshot(),
       notice: sessionNotice,
@@ -2941,6 +2966,30 @@ export function createEngine(options: EngineOptions = {}): Engine {
         case 'subtitles.clear':
           founderActed = true;
           clearSubtitle('the founder turned subtitles off');
+          push();
+          return;
+        case 'queue.add': {
+          // 24z's ordering lives in the model, not here.
+          queue = addFiles(
+            queue,
+            intent.paths.map((p) => ({ path: p, name: basename(p) })),
+            (p) => `q:${p}`,
+          );
+          push();
+          return;
+        }
+        case 'queue.move':
+          // 24c: nothing reaches the television. There is nothing here that could.
+          queue = moveItem(queue, intent.id, intent.toIndex);
+          push();
+          return;
+        case 'queue.remove':
+          queue = removeItem(queue, intent.id);
+          push();
+          return;
+        case 'queue.select':
+          // 24ab: selects, and that is all.
+          queue = selectItem(queue, intent.id);
           push();
           return;
         case 'diagnostics.export':

@@ -26,9 +26,10 @@ const bridge: CastGoodBridge = {
     ipcRenderer.send(IPC_CHANNELS.hello);
   },
   async pickVideoFile(startIn) {
-    // Cancelling resolves null — main returns null and never throws for a cancel, so PRD
-    // 2b (a cancelled picker leaves the previous selection untouched) is honoured without
-    // catching anything here.
+    // Cancelling resolves an EMPTY ARRAY — main returns one and never throws for a cancel,
+    // so PRD 2b (a cancelled picker leaves the previous selection untouched) is honoured
+    // without catching anything here. 24a made this many rather than one; choosing a single
+    // film is an array of one and the v1 path is unchanged (24b).
     //
     // **A genuine failure is deliberately allowed to reject.** This used to be caught and
     // turned into `null`, which the renderer reads as "cancelled" — so an `invoke` that
@@ -36,7 +37,7 @@ const bridge: CastGoodBridge = {
     // mind: the button did nothing, said nothing, and logged nothing on either side. The
     // renderer already has a sentence for a picker that failed; swallowing the error here
     // is what made it unreachable. `bridge.ts` catches this and shows it.
-    return (await ipcRenderer.invoke(IPC_CHANNELS.pickVideoFile, startIn ?? null)) as string | null;
+    return (await ipcRenderer.invoke(IPC_CHANNELS.pickVideoFile, startIn ?? null)) as string[];
   },
   async pickSubtitleFile(startIn) {
     // Same contract as `pickVideoFile` above, and for the same reason a genuine failure is
