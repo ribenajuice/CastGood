@@ -6,6 +6,25 @@ All user-visible changes, in plain language, newest first.
 - You can now … -->
 
 
+## 2026-09-21 — Queues: line up a season, and it plays straight through
+
+**You can now queue up more than one film or episode.** Choose several files at once and
+they line up in order; drag a row to reorder it, or select a row and hold Alt with the up
+or down arrow. The one you're watching can't be removed from the list, so you can't pull
+the rug out from under yourself by accident.
+
+**The next thing starts the instant this one finishes — no wait, no flash of the
+Chromecast's own home screen.** CastGood prepares the next queued file while the current
+one is still playing, so a film that needs converting is already partway done by the time
+its turn comes up. This was proven start-to-finish on a real television: a 116-minute film
+played while the next one converted underneath it, with zero interruptions to the film
+actually on screen — that guarantee was never up for negotiation.
+
+**A "Send a report" button, for when something goes wrong.** It writes out what CastGood
+was doing right before the problem, with anything personal — your Windows username, device
+names, network addresses — automatically removed first, so it's safe to hand to whoever's
+helping you fix it.
+
 ## 2026-09-09 — CastGood told you the wrong television had gone
 
 **If a television dropped off mid-film, CastGood could name the wrong one.** It would say
